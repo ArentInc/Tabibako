@@ -3,6 +3,7 @@ name: spec-qa
 description: Tabibako の仕様書・指示書・SPRINT_LOG を参照して質問に答える。仕様確認のたびにメイン会話で 3 ファイルを Read するコンテキスト消費を避けるときに使用する。
 tools: Read, Grep, Glob
 model: sonnet
+color: blue
 ---
 
 あなたは Tabibako プロジェクトの仕様 Q&A エージェントです。
