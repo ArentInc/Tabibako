@@ -392,9 +392,122 @@
 
 ---
 
-## Sprint 5：編集・削除・絞り込み・ソート（未着手）
+## Sprint 5：編集・削除・絞り込み・ソート（完了：2026-05-14）
 
-（着手時に追記）
+### 実装内容
+
+#### 編集機能
+- `modalOpen(tripId)` 引数で「新規 / 編集」を分岐
+- 編集モード時：trip をディープクローンして draft に展開、全フォーム要素・multiSelect・photoUpload を既存値で初期化
+- `App.state.editingTripId` / `editingOriginalPhotoIds` で編集対象を追跡
+- `_preModalSelectedId` で modal open 前の選択を保持、close で復元
+- 編集中の重複ピン回避：selection を一時クリア（draft pins のみ表示）
+- モーダルタイトルを「旅行を追加」/「旅行を編集」で動的切替
+- `photoUpload._pending` に `isNew` フラグを追加：既存写真は IDB に再 put しない（無駄を排除）
+- 保存時に削除された写真を IDB からも自動削除
+
+#### 削除機能
+- `deleteSelectedTrip()`：確認ダイアログ → IDB 写真クリーンアップ → `state.trips` から除去
+- 選択状態をクリアし、地図ピン・右パネル・写真ビューア・action ボタンを全再描画
+- `updateActionButtons()` で編集・削除ボタンを `selectedTripId` の有無に同期
+
+#### 訪問地域自動判定（旧称：都道府県）
+- 47 都道府県の静的リスト + `extractRegion` ヘルパ
+- 日本国内 → 都道府県、海外 → display_name 末尾の国名
+- `place.region` / `trip.regions` フィールド
+- マイグレーション：旧 `prefecture` / `prefectures` を `region` / `regions` にリネーム + 削除
+- 旅行カード 2 行目に訪問地域表示（仕様書通り「訪問場所 N か所」から切替）
+- 右パネル詳細に「訪問地域」セクション
+
+#### ソートドロップダウン
+- `App.sort` モジュール：3 種類（日程新しい順・古い順・旅行名あいうえお順）
+- 選択状態を `tabibako_sort` に保存・次回復元
+- 既存のソートボタンクリックで開閉、外クリックで閉じる
+- `renderTripList` で `sort.apply()` 適用
+
+#### 絞り込み 3 セクション
+- `App.filter` モジュール：移動手段・同行者・タグの 3 系統独立
+- 左パネル `.filter-section` にチップ表示、クリックで toggle
+- カラータグ（青・緑・紫）でカテゴリ識別
+- ロジック：同カテゴリ内は **OR**、カテゴリ間は **AND**
+- 値プールに何もない場合はセクション非表示
+- 該当 0 件の場合は「絞り込み条件に該当する旅行がありません」表示
+- フィルタ状態を `tabibako_filter` に保存・次回復元
+- キーボード（Enter / Space）対応
+
+### 設計上の決定事項
+
+| 決定 | 理由 |
+|------|------|
+| 編集時に selectedTripId を一時クリア | 既存ピン（selectedTripMarkers）と draft ピンの重複表示を回避。close 時に `_preModalSelectedId` から復元 |
+| `photoUpload._pending` に isNew フラグ | 既存写真の再 put を回避（IDB 書き込み負荷削減） |
+| 削除時に IDB 写真も連動削除 | Sprint 4 で予告していた残骸対応。失敗してもログのみ・state 削除は完遂 |
+| 訪問地域：日本=都道府県・海外=国名 | ユーザー要望。空文字 display_name や判定不能のケースは「訪問地域未判定」フォールバック |
+| フィールド名を `region`/`regions` に統一 | 国内外を区別しない命名。マイグレーションで旧 `prefecture`/`prefectures` を自動移行 |
+| 絞り込み：同カテゴリ OR / カテゴリ間 AND | 「自転車 OR 徒歩 AND 家族 AND 日帰り」のような自然な条件式 |
+| フィルタ状態は localStorage に永続化 | リロード後も継続。意図的に開きっぱなしの絞り込みを許容 |
+
+### 残課題（Sprint 6 以降）
+
+#### Sprint 6 でやること
+- ヒートマップ（Leaflet.heat プラグイン）
+- 旅行選択時の `map.fitBounds()` オートズーム
+
+#### Sprint 7 以降に持ち越し / Issue 化
+- 左右パネルのドラッグリサイズ（Issue #3）
+- 期間絞り込み（年・月）— 仕様書に記載あるが Sprint 5 では未実装
+- 設定画面（値プール削除を集約した管理画面）
+- データのエクスポート / インポート（JSON）
+
+### 既知の留意点
+
+- **編集時の写真メモリ**：既存写真が DataURL で `_pending` に展開されるため、写真 10 枚の編集だと 2〜3MB のメモリ使用。実用上問題なし
+- **renderTripList の全再描画**：絞り込み・ソート・編集すべてで innerHTML 全置換。trip 数が増えると無駄。Sprint 7+ で DOM diff を検討
+- **フィルタ UI の値プール表示**：プールに削除済みでも、選択中（`_selected` に残っている）の値があると不整合。実用上の影響は低いが、将来 `_selected` をプールと同期する処理を追加検討
+- **絞り込みなしで該当 0 件**：state.trips.length === 0 と filter 後 0 件で異なるメッセージを表示（仕様通り）
+
+### レビュー指摘と修正（Sprint 5、2026-05-14）
+
+| 指摘 | 原因 | 修正 |
+|------|------|------|
+| プール削除後、filter._selected に残った値で「該当 0 件ロック」する可能性 | フィルタ選択とプールが独立管理されていた | `filter._syncWithPool()` を `render()` 冒頭で呼び、プールに存在しない値を `_selected` から自動掃除。`multiSelect.deleteFromPool` から `App.renderTripList()` を呼んで同期 |
+| `sort.getCurrent()` が localStorage の不正値をそのまま返して未ソート状態に | バリデーション無しで raw 値を使用 | `OPTIONS.some` でホワイトリスト判定し、不一致なら `DEFAULT` フォールバック。`setCurrent` も同様にバリデート |
+| 編集時：旧写真の IDB 削除が localStorage 保存より前 → save 失敗時に写真消失 | 順序が不適切 | `storage.save()` を throw 化し、modalSave / deleteSelectedTrip は「state 更新 → save → IDB 削除」の順に整理。save 失敗時に state を rollback |
+| `place-search` の住所検索が IME 変換中の中間文字でも走る | Sprint 4 で multiSelect のみ IME 対応、search input には未対応 | `compositionstart` / `compositionend` フラグ + デバウンス関数内で isComposing 判定 |
+| 編集モーダルが写真ロード完了まで表示されず体感遅延 | `modal-backdrop.hidden = false` が `await loadFromTrip` の後 | 写真エリアを先に空状態描画 → モーダル表示 → 写真は非同期でバックグラウンドロード |
+| `extractRegion` が逆引き失敗時のフォールバック座標表示「(35.0000, 139.0000)」を誤判定 | 単純な `split(',')` ベース | 冒頭で正規表現 `/^\([-\d.]+,\s*[-\d.]+\)$/` ガード追加 → null 返却 |
+| `filter-chip` に `aria-pressed` 未設定（active 状態が SR に伝わらない） | chip 描画 HTML から漏れ | active 状態と同期して `aria-pressed="true|false"` 付与 |
+
+### Sprint 5 動作確認用チェックリスト
+
+#### 編集
+- [ ] カード選択 → 編集ボタン有効化
+- [ ] 編集ボタンでモーダル open、全フィールド・写真が反映される
+- [ ] 編集中に写真追加・削除可能、保存で反映
+- [ ] キャンセルで元の状態に戻る、選択も復元
+- [ ] 削除した写真は IDB からも消える
+
+#### 削除
+- [ ] カード選択 → 削除ボタン有効化
+- [ ] 削除確認ダイアログ → OK で削除、地図ピン・右パネル消失
+- [ ] キャンセルで何も起きない
+
+#### 訪問地域
+- [ ] 国内旅行：都道府県表示（例：京都府）
+- [ ] 海外旅行：国名表示（例：France）
+- [ ] 既存データもリロード後に区分けされている
+
+#### ソート
+- [ ] ソートボタン → ドロップダウン展開、現在の選択肢に ✓
+- [ ] 各オプション選択で旅行カードの順序が変わる
+- [ ] リロード後も選択状態が保持される
+
+#### 絞り込み
+- [ ] 左パネルにフィルタ 3 セクションが表示（プールに値があるもののみ）
+- [ ] チップクリックで active 化、該当する旅行のみカード表示
+- [ ] 複数選択：同カテゴリ OR、カテゴリ間 AND
+- [ ] 該当 0 件のとき適切なメッセージ
+- [ ] リロード後もフィルタ状態が保持される
 
 ---
 

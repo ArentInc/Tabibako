@@ -352,6 +352,102 @@
     .btn-primary:hover:not(:disabled) { background: var(--color-background-info-hover); }
     .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    /* ===== 絞り込み 3 セクション（左パネル）===== */
+    .filter-section {
+      flex-shrink: 0;
+      border-bottom: 0.5px solid var(--color-border-tertiary);
+      max-height: 240px;
+      overflow-y: auto;
+    }
+    .filter-section[hidden] { display: none; }
+    .filter-group {
+      padding: 6px 10px;
+    }
+    .filter-group + .filter-group {
+      border-top: 0.5px solid var(--color-border-tertiary);
+    }
+    .filter-group-label {
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--color-text-secondary);
+      margin-bottom: 4px;
+    }
+    .filter-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+    }
+    .filter-chip {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      border: 0.5px solid var(--color-border-secondary);
+      background: transparent;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      user-select: none;
+      line-height: 1.4;
+    }
+    .filter-chip:hover { background: var(--color-background-secondary); }
+    .filter-group[data-category="transport"] .filter-chip.active {
+      background: var(--color-background-info);
+      color: var(--color-text-info);
+      border-color: var(--color-border-info);
+    }
+    .filter-group[data-category="companions"] .filter-chip.active {
+      background: var(--color-background-success);
+      color: var(--color-text-success);
+      border-color: var(--color-border-success);
+    }
+    .filter-group[data-category="tags"] .filter-chip.active {
+      background: var(--color-background-tag);
+      color: var(--color-text-tag);
+      border-color: var(--color-border-tag);
+    }
+    .filter-empty {
+      font-size: 10px;
+      color: var(--color-text-secondary);
+    }
+
+    /* ===== ソートドロップダウン ===== */
+    .sort-dropdown {
+      position: absolute;
+      top: 100%;
+      right: 10px;
+      margin-top: 4px;
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: var(--border-radius-md);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      z-index: 30;
+      min-width: 180px;
+      overflow: hidden;
+    }
+    .sort-dropdown[hidden] { display: none; }
+    .sort-option {
+      padding: 8px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--color-text-primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sort-option:hover { background: var(--color-background-secondary); }
+    .sort-option.active {
+      background: var(--color-background-info);
+      color: var(--color-text-info);
+      font-weight: 500;
+    }
+    .sort-option.active::before {
+      content: '✓';
+      font-size: 11px;
+    }
+    .sort-option:not(.active)::before {
+      content: '';
+      width: 11px;
+    }
+
     /* ===== 旅行カード（左パネル）===== */
     .trip-card {
       padding: 10px;
@@ -869,13 +965,16 @@
     <aside class="left" aria-label="旅行一覧">
       <div class="left-toolbar">
         <span class="left-toolbar-title">Tabibako</span>
-        <button class="icon-btn" id="sort-btn" type="button" title="ソート" aria-label="ソート">
+        <button class="icon-btn" id="sort-btn" type="button" title="ソート" aria-label="ソート" aria-haspopup="true" aria-expanded="false">
           <i class="ti ti-arrows-sort" style="font-size:14px" aria-hidden="true"></i>
         </button>
         <button class="icon-btn" id="add-btn" type="button" title="旅行を追加" aria-label="旅行を追加">
           <i class="ti ti-plus" style="font-size:14px" aria-hidden="true"></i>
         </button>
+        <div class="sort-dropdown" id="sort-dropdown" role="menu" hidden></div>
       </div>
+
+      <div class="filter-section" id="filter-section" hidden></div>
 
       <div class="trip-list" id="trip-list">
         <div class="trip-list-empty">
@@ -1057,9 +1156,12 @@
         async init() {
           this.cacheElements();
           this.storage.load();
+          this.filter.load();
           await this.photoDB.init();
           this.bindEvents();
           this.photoViewer.bindEvents();
+          this.sort.bindEvents();
+          this.filter.bindEvents();
           this.mapInit();
           this.renderTripList();
           this.updateActionButtons();
@@ -1069,6 +1171,7 @@
           const ids = [
             'add-btn', 'trip-list', 'pin-count-value', 'detail-body', 'photo-viewer',
             'edit-btn', 'delete-btn',
+            'sort-btn', 'sort-dropdown', 'filter-section',
             'modal-backdrop', 'modal-close-btn', 'modal-cancel-btn', 'modal-save-btn',
             'modal-title',
             'trip-name', 'trip-start', 'trip-end',
@@ -1109,8 +1212,17 @@
             this.selectTrip(card.dataset.tripId);
           });
 
-          // 住所検索（debounce）。空入力時は pending 中の検索も無効化
-          this.el['place-search'].addEventListener('input', this.debounce(() => {
+          // 住所検索（debounce + IME 対応）。IME 変換中は再描画しない、
+          // 確定後に再描画されるとデバウンス起点が増えるので compositionend からも再評価
+          let placeSearchComposing = false;
+          this.el['place-search'].addEventListener('compositionstart', () => { placeSearchComposing = true; });
+          this.el['place-search'].addEventListener('compositionend', () => {
+            placeSearchComposing = false;
+            // 確定値で改めて debounce タイマーを開始
+            debouncedSearch();
+          });
+          const debouncedSearch = this.debounce(() => {
+            if (placeSearchComposing) return;
             const q = this.el['place-search'].value.trim();
             if (q) {
               this.searchAddress(q);
@@ -1118,7 +1230,8 @@
               this._searchRequestId++;
               this.renderSearchResults(null);
             }
-          }, SEARCH_DEBOUNCE_MS));
+          }, SEARCH_DEBOUNCE_MS);
+          this.el['place-search'].addEventListener('input', debouncedSearch);
 
           // Document レベルのキーボードハンドラ集約
           document.addEventListener('keydown', (e) => {
@@ -1131,12 +1244,16 @@
             this.photoViewer.handleArrowKey(e);
           });
 
-          // Document レベルのマウスダウン集約：multiselect 外クリックで閉じる。
-          // mousedown を使うのは、click 時点では multiselect の DOM が render() で
-          // 差し替わって e.target が detached になり closest() が機能しなくなるため
+          // Document レベルのマウスダウン集約：multiselect / ソートドロップダウンを外クリックで閉じる。
+          // mousedown を使うのは、click 時点では DOM が render() で差し替わって
+          // e.target が detached になり closest() が機能しなくなるため
           document.addEventListener('mousedown', (e) => {
-            if (e.target.closest('.multiselect')) return;
-            this.multiSelect.closeAll();
+            if (!e.target.closest('.multiselect')) {
+              this.multiSelect.closeAll();
+            }
+            if (!e.target.closest('#sort-dropdown') && !e.target.closest('#sort-btn')) {
+              this.sort.close();
+            }
           });
 
           // 背景クリックで閉じる（ピックモード中は無効）
@@ -1318,16 +1435,18 @@
           this.renderDraftPins();
           this.multiSelect.resetAndRenderAll();
 
-          // 既存写真をプリロード（編集モード時）/ クリア（新規時）
-          if (editing && existing.photos && existing.photos.length > 0) {
-            await this.photoUpload.loadFromTrip(existing.photos);
-          } else {
-            this.photoUpload.resetAndRender();
-          }
+          // 写真エリアは先に空状態でレンダリング → モーダル表示 → 写真は非同期ロード。
+          // 写真ロードを待つと編集モーダル表示までに遅延が出るため
+          this.photoUpload.resetAndRender();
           this.photoUpload.bindEvents();
 
           this.el['modal-backdrop'].hidden = false;
           this.el['trip-name'].focus();
+
+          // 既存写真は表示後にバックグラウンドでロード
+          if (editing && existing.photos && existing.photos.length > 0) {
+            await this.photoUpload.loadFromTrip(existing.photos);
+          }
         },
 
         modalClose() {
@@ -1375,22 +1494,26 @@
           try {
             draft.photos = await this.photoUpload.commitToDraft();
 
+            let oldPhotoIdsToDelete = [];
             if (this.state.editingTripId) {
-              // 編集モード: 既存 trip を置換 + 削除された写真を IDB からも消す
+              // 編集モード: 既存 trip を置換、削除対象写真は localStorage 保存後に IDB から消す
               const newPhotoIds = new Set(draft.photos.map(p => p.id));
-              const toDelete = this.state.editingOriginalPhotoIds.filter(id => !newPhotoIds.has(id));
-              for (const id of toDelete) {
-                try { await this.photoDB.delete(id); }
-                catch (err) { console.warn('古い写真の削除に失敗:', id, err); }
-              }
+              oldPhotoIdsToDelete = this.state.editingOriginalPhotoIds.filter(id => !newPhotoIds.has(id));
               const idx = this.state.trips.findIndex(t => t.id === this.state.editingTripId);
               if (idx >= 0) this.state.trips[idx] = draft;
             } else {
-              // 新規モード
               this.state.trips.push(draft);
             }
 
+            // 先に localStorage に保存（失敗時は throw → catch で UI 通知）
             this.storage.save();
+
+            // localStorage 保存成功後に IDB から旧写真削除（失敗してもログのみ）
+            for (const id of oldPhotoIdsToDelete) {
+              try { await this.photoDB.delete(id); }
+              catch (err) { console.warn('古い写真の削除に失敗:', id, err); }
+            }
+
             this.renderTripList();
             this.modalClose();
           } catch (err) {
@@ -1446,22 +1569,37 @@
           if (this.el['delete-btn']) this.el['delete-btn'].disabled = !hasSelection;
         },
 
-        // 選択中の旅行を削除（確認ダイアログ → IDB 写真クリーンアップ → state 更新）
+        // 選択中の旅行を削除（確認ダイアログ → localStorage 保存 → IDB 写真クリーンアップ）
+        // localStorage 保存が先：失敗時に rollback できるよう IDB 削除は保存成功後に
         async deleteSelectedTrip() {
           const trip = this.getSelectedTrip();
           if (!trip) return;
           const message = `「${trip.name}」を削除しますか？\n（取り消しできません。関連する写真もすべて削除されます）`;
           if (!confirm(message)) return;
 
-          // IDB から写真を削除（失敗しても続行：state.trips の削除は完遂する）
+          const tripBackup = trip;
+          this.state.trips = this.state.trips.filter(t => t.id !== trip.id);
+          this.state.selectedTripId = null;
+
+          try {
+            this.storage.save();
+          } catch (err) {
+            console.error('削除の保存に失敗:', err);
+            alert(err.message || '削除に失敗しました');
+            // Rollback in-memory state
+            this.state.trips.push(tripBackup);
+            this.state.selectedTripId = tripBackup.id;
+            this.renderTripList();
+            this.updateActionButtons();
+            return;
+          }
+
+          // 保存成功後に IDB から写真削除（失敗してもログのみ）
           for (const photo of (trip.photos || [])) {
             try { await this.photoDB.delete(photo.id); }
             catch (err) { console.warn('写真の削除に失敗:', photo.id, err); }
           }
 
-          this.state.trips = this.state.trips.filter(t => t.id !== trip.id);
-          this.state.selectedTripId = null;
-          this.storage.save();
           this.renderTripList();
           this.renderSelectedTripPins();
           this.renderTripDetail();
@@ -1530,7 +1668,8 @@
               localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state.trips));
             } catch (err) {
               console.error('localStorage の書き込みに失敗', err);
-              alert('保存に失敗しました（localStorage の容量制限の可能性があります）');
+              // 呼び出し側で catch して整合性復旧できるよう throw
+              throw new Error('localStorage の容量制限に達したため保存できませんでした');
             }
           },
         },
@@ -1798,6 +1937,8 @@
             const selected = this.getSelected(category).filter(v => v !== value);
             this.setSelected(category, selected);
             this.render(category);
+            // プールが変わったので絞り込み UI と trip-list も再描画（filter._syncWithPool が走る）
+            App.renderTripList();
           },
 
           // ↑↓ で activeIndex 移動
@@ -2087,6 +2228,211 @@
           },
         },
 
+        // ===== 絞り込み（左パネルの 3 セクション独立）=====
+        // 同カテゴリ内は OR、カテゴリ間は AND
+        filter: {
+          STORAGE_KEY: 'tabibako_filter',
+          CATEGORIES: ['transport', 'companions', 'tags'],
+          LABELS: {
+            transport: '移動手段',
+            companions: '同行者',
+            tags: 'タグ',
+          },
+          _selected: { transport: [], companions: [], tags: [] },
+          _eventsBound: false,
+
+          load() {
+            try {
+              const raw = localStorage.getItem(this.STORAGE_KEY);
+              if (raw) {
+                const data = JSON.parse(raw);
+                for (const cat of this.CATEGORIES) {
+                  if (Array.isArray(data[cat])) this._selected[cat] = data[cat];
+                }
+              }
+            } catch (err) {
+              console.error('絞り込み状態の読み込み失敗', err);
+            }
+          },
+
+          save() {
+            try {
+              localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this._selected));
+            } catch (err) {
+              console.error('絞り込み状態の保存失敗', err);
+            }
+          },
+
+          // 全カテゴリで未選択 = フィルタなし
+          isEmpty() {
+            return this.CATEGORIES.every(c => this._selected[c].length === 0);
+          },
+
+          // プールから削除された値が _selected に残るとロックされた状態になるため、
+          // render の都度 pool との整合性を取り直す
+          _syncWithPool() {
+            let changed = false;
+            for (const cat of this.CATEGORIES) {
+              const pool = App.multiSelect.getPool(cat);
+              const before = this._selected[cat].length;
+              this._selected[cat] = this._selected[cat].filter(v => pool.includes(v));
+              if (this._selected[cat].length !== before) changed = true;
+            }
+            if (changed) this.save();
+          },
+
+          // フィルタを旅行配列に適用
+          apply(trips) {
+            if (this.isEmpty()) return trips;
+            return trips.filter(trip => {
+              for (const cat of this.CATEGORIES) {
+                const sel = this._selected[cat];
+                if (sel.length === 0) continue;
+                const tripValues = trip[cat] || [];
+                // OR within category
+                if (!sel.some(v => tripValues.includes(v))) return false;
+              }
+              return true;
+            });
+          },
+
+          toggle(category, value) {
+            const sel = this._selected[category];
+            const i = sel.indexOf(value);
+            if (i >= 0) sel.splice(i, 1);
+            else sel.push(value);
+            this.save();
+            this.render();
+            App.renderTripList();
+          },
+
+          render() {
+            // 描画前にプールと _selected の整合性を取り直す
+            this._syncWithPool();
+
+            const container = App.el['filter-section'];
+            if (!container) return;
+            // プールに何も値がなければセクションごと非表示
+            const hasAnyValue = this.CATEGORIES.some(c => App.multiSelect.getPool(c).length > 0);
+            if (!hasAnyValue) {
+              container.hidden = true;
+              container.innerHTML = '';
+              return;
+            }
+            container.hidden = false;
+            container.innerHTML = this.CATEGORIES.map(cat => {
+              const pool = App.multiSelect.getPool(cat);
+              const sel = this._selected[cat];
+              const chipsHtml = pool.length > 0
+                ? pool.map(v => {
+                    const active = sel.includes(v);
+                    return `<span class="filter-chip${active ? ' active' : ''}" data-value="${App.escape(v)}" role="button" tabindex="0" aria-pressed="${active}">${App.escape(v)}</span>`;
+                  }).join('')
+                : '<span class="filter-empty">なし</span>';
+              return `
+                <div class="filter-group" data-category="${cat}">
+                  <div class="filter-group-label">${this.LABELS[cat]}</div>
+                  <div class="filter-tags">${chipsHtml}</div>
+                </div>
+              `;
+            }).join('');
+          },
+
+          bindEvents() {
+            if (this._eventsBound) return;
+            this._eventsBound = true;
+            const container = App.el['filter-section'];
+            if (!container) return;
+            const handleChipActivate = (target) => {
+              const chip = target.closest('.filter-chip');
+              if (!chip || !chip.dataset.value) return;
+              const group = chip.closest('.filter-group');
+              if (!group) return;
+              this.toggle(group.dataset.category, chip.dataset.value);
+            };
+            container.addEventListener('click', (e) => handleChipActivate(e.target));
+            container.addEventListener('keydown', (e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              if (!e.target.matches('.filter-chip')) return;
+              e.preventDefault();
+              handleChipActivate(e.target);
+            });
+          },
+        },
+
+        // ===== ソート（左パネル旅行一覧）=====
+        sort: {
+          STORAGE_KEY: 'tabibako_sort',
+          DEFAULT: 'date-desc',
+          OPTIONS: [
+            { value: 'date-desc', label: '日程（新しい順）' },
+            { value: 'date-asc',  label: '日程（古い順）' },
+            { value: 'name-asc',  label: '旅行名（あいうえお順）' },
+          ],
+          _open: false,
+          _eventsBound: false,
+
+          getCurrent() {
+            const stored = localStorage.getItem(this.STORAGE_KEY);
+            // localStorage が手動編集された場合や旧バージョンの値が残った場合のフォールバック
+            return this.OPTIONS.some(o => o.value === stored) ? stored : this.DEFAULT;
+          },
+          setCurrent(value) {
+            if (!this.OPTIONS.some(o => o.value === value)) return;
+            localStorage.setItem(this.STORAGE_KEY, value);
+          },
+
+          // 旅行配列をソートして返す（元配列は変更しない）
+          apply(trips) {
+            const cur = this.getCurrent();
+            const arr = [...trips];
+            if (cur === 'date-desc') {
+              arr.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
+            } else if (cur === 'date-asc') {
+              arr.sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+            } else if (cur === 'name-asc') {
+              arr.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ja'));
+            }
+            return arr;
+          },
+
+          toggle() { this._open = !this._open; this.render(); },
+          close()  { this._open = false; this.render(); },
+
+          render() {
+            const dropdown = App.el['sort-dropdown'];
+            const btn = App.el['sort-btn'];
+            if (!dropdown) return;
+            btn?.setAttribute('aria-expanded', String(this._open));
+            if (!this._open) {
+              dropdown.hidden = true;
+              dropdown.innerHTML = '';
+              return;
+            }
+            const cur = this.getCurrent();
+            dropdown.innerHTML = this.OPTIONS.map(opt => `
+              <div class="sort-option${opt.value === cur ? ' active' : ''}" data-sort="${App.escape(opt.value)}" role="menuitem">${App.escape(opt.label)}</div>
+            `).join('');
+            dropdown.hidden = false;
+          },
+
+          bindEvents() {
+            if (this._eventsBound) return;
+            this._eventsBound = true;
+            const btn = App.el['sort-btn'];
+            const dropdown = App.el['sort-dropdown'];
+            if (!btn || !dropdown) return;
+            btn.addEventListener('click', () => this.toggle());
+            dropdown.addEventListener('click', (e) => {
+              const opt = e.target.closest('.sort-option');
+              if (!opt) return;
+              this.setCurrent(opt.dataset.sort);
+              this.close();
+              App.renderTripList();
+            });
+          },
+        },
+
         // ===== 写真ビューア（右パネル上部）=====
         // 選択中の旅行の写真を 1 枚ずつ表示。矢印 / キーボードで切替
         photoViewer: {
@@ -2189,13 +2535,26 @@
 
         // ===== Rendering =====
         renderTripList() {
+          // 絞り込み UI を最新の値プールで再描画
+          this.filter.render();
+
           const container = this.el['trip-list'];
-          const trips = this.state.trips;
-          if (trips.length === 0) {
+          if (this.state.trips.length === 0) {
             container.innerHTML = `
               <div class="trip-list-empty">
                 まだ旅行が登録されていません。<br />
                 ＋ボタンから追加できるようになります。
+              </div>
+            `;
+            return;
+          }
+          // 絞り込み → ソートの順で適用（元配列は変更しない）
+          let trips = this.filter.apply(this.state.trips);
+          trips = this.sort.apply(trips);
+          if (trips.length === 0) {
+            container.innerHTML = `
+              <div class="trip-list-empty">
+                絞り込み条件に該当する旅行がありません。
               </div>
             `;
             return;
@@ -2392,9 +2751,12 @@
         },
 
         // ===== Helpers =====
-        // 訪問地域を display_name から抽出：日本国内は都道府県、海外は国名（display_name 末尾）
+        // 訪問地域を display_name から抽出：日本国内は都道府県、海外は国名（display_name 末尾）。
+        // PREFECTURES の配列順は包含判定の優先順位を兼ねる（「東京都」が「京都府」より先）。
         extractRegion(name) {
           if (!name) return null;
+          // 逆引き失敗時のフォールバック座標表示「(35.0000, 139.0000)」は地域判定不能
+          if (/^\([-\d.]+\s*,\s*[-\d.]+\)$/.test(name)) return null;
           const pref = PREFECTURES.find(p => name.includes(p));
           if (pref) return pref;
           // 都道府県マッチなし → 海外。カンマ区切り末尾を国名として扱う
