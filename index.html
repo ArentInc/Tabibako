@@ -24,19 +24,23 @@
       --color-background-primary: #ffffff;
       --color-background-secondary: #f5f5f4;
       --color-background-info: #e6f1fb;
+      --color-background-info-hover: #d9e9f7;
       --color-background-success: #e1f5ee;
       --color-background-photo-placeholder: #c9d9e8;
+      --color-background-error: #fef2f2;
 
       --color-border-secondary: #d6d3d1;
       --color-border-tertiary: #e7e5e4;
       --color-border-info: #b5d4f4;
       --color-border-success: #9fe1cb;
+      --color-border-error: #fecaca;
 
       --color-text-primary: #1c1917;
       --color-text-secondary: #78716c;
       --color-text-info: #0c447c;
       --color-text-success: #085041;
-      --color-text-photo-placeholder: #8ab;
+      --color-text-photo-placeholder: #88aabb;
+      --color-text-error: #c53030;
 
       --border-radius-md: 6px;
       --border-radius-lg: 10px;
@@ -211,7 +215,262 @@
       align-items: center;
       gap: 4px;
     }
+    .btn-sm:hover:not(:disabled) { background: var(--color-background-secondary); }
     .btn-sm:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-primary {
+      font-size: 12px;
+      padding: 6px 14px;
+      border: 0.5px solid var(--color-border-info);
+      border-radius: var(--border-radius-md);
+      background: var(--color-background-info);
+      color: var(--color-text-info);
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--color-background-info-hover); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ===== 旅行カード（左パネル）===== */
+    /* Sprint 2 では描画のみ。クリック選択（cursor / hover / selected）は Sprint 3 で追加 */
+    .trip-card {
+      padding: 10px;
+      margin-bottom: 6px;
+      border: 0.5px solid var(--color-border-tertiary);
+      border-radius: var(--border-radius-md);
+      background: var(--color-background-primary);
+    }
+    .trip-card-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-primary);
+      margin-bottom: 4px;
+      word-break: break-word;
+    }
+    .trip-card-meta {
+      font-size: 11px;
+      color: var(--color-text-secondary);
+      line-height: 1.6;
+    }
+    .trip-card-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* ===== 地図ピン（Tabler Icon ベース）===== */
+    /* L.divIcon の親要素。.leaflet-div-icon の白背景・枠線を打ち消す */
+    .tabibako-pin {
+      background: transparent;
+      border: none;
+    }
+    .tabibako-pin .ti {
+      font-size: 32px;
+      color: var(--color-text-info);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+      line-height: 1;
+    }
+
+    /* ===== 地図ピックモード ===== */
+    body.pick-mode #map { cursor: crosshair; }
+    .pick-mode-banner {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 600;
+      background: var(--color-background-info);
+      border: 0.5px solid var(--color-border-info);
+      border-radius: var(--border-radius-md);
+      padding: 6px 14px;
+      font-size: 12px;
+      color: var(--color-text-info);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    /* ===== モーダル ===== */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      transition: background 0.15s;
+    }
+    .modal-backdrop[hidden] { display: none; }
+
+    /* ピックモード中はモーダルが右下に縮小し、背景透過で地図クリック可能 */
+    .modal-backdrop.pick-mode {
+      background: transparent;
+      align-items: flex-end;
+      justify-content: flex-end;
+      pointer-events: none;
+    }
+    .modal-backdrop.pick-mode .modal {
+      pointer-events: auto;
+      width: 300px;
+      margin: 0 16px 16px 0;
+      opacity: 0.95;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    }
+
+    .modal {
+      background: var(--color-background-primary);
+      border-radius: var(--border-radius-lg);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      width: 480px;
+      max-width: 90vw;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      transition: width 0.15s, opacity 0.15s;
+    }
+    .modal-header {
+      padding: 12px 16px;
+      border-bottom: 0.5px solid var(--color-border-tertiary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .modal-title {
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .modal-body {
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .modal-footer {
+      padding: 10px 16px;
+      border-top: 0.5px solid var(--color-border-tertiary);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .modal-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .modal-field-row {
+      display: flex;
+      gap: 10px;
+    }
+    .modal-field-row > .modal-field { flex: 1; }
+    .modal-label {
+      font-size: 11px;
+      color: var(--color-text-secondary);
+    }
+    .modal-label .required { color: var(--color-text-error); }
+    .modal input[type="text"],
+    .modal input[type="date"] {
+      font-size: 13px;
+      padding: 6px 10px;
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: var(--border-radius-md);
+      background: var(--color-background-primary);
+      font-family: inherit;
+      width: 100%;
+      color: var(--color-text-primary);
+    }
+    .modal input[type="text"]:focus,
+    .modal input[type="date"]:focus {
+      outline: none;
+      border-color: var(--color-border-info);
+    }
+
+    /* 検索結果ドロップダウン */
+    .search-area { position: relative; }
+    .search-result-list {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: var(--border-radius-md);
+      margin-top: 2px;
+      max-height: 180px;
+      overflow-y: auto;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    .search-result-list[hidden] { display: none; }
+    .search-result-item {
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      border-bottom: 0.5px solid var(--color-border-tertiary);
+      line-height: 1.4;
+    }
+    .search-result-item:hover { background: var(--color-background-secondary); }
+    .search-result-item:last-child { border-bottom: none; }
+    .search-result-loading,
+    .search-result-empty {
+      padding: 10px;
+      font-size: 11px;
+      color: var(--color-text-secondary);
+      text-align: center;
+    }
+
+    /* 追加済み訪問場所リスト */
+    .place-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    .place-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: var(--color-background-secondary);
+      border-radius: var(--border-radius-md);
+      font-size: 12px;
+    }
+    .place-item-name {
+      flex: 1;
+      word-break: break-word;
+    }
+    .place-item-remove {
+      width: 22px;
+      height: 22px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: var(--color-text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .place-item-remove:hover {
+      background: var(--color-background-primary);
+      color: var(--color-text-error);
+    }
+
+    .form-error {
+      font-size: 11px;
+      color: var(--color-text-error);
+      padding: 4px 8px;
+      background: var(--color-background-error);
+      border: 0.5px solid var(--color-border-error);
+      border-radius: var(--border-radius-md);
+    }
+    .form-error[hidden] { display: none; }
   </style>
 </head>
 <body>
@@ -240,10 +499,10 @@
     <main class="center" aria-label="地図">
       <div id="map"></div>
 
-      <!-- 左上：ピン数表示（Sprint 2 以降で動的化） -->
+      <!-- 左上：ピン数表示（地図に実際に表示されているピンの数） -->
       <div class="map-pin-count" id="pin-count">
         <i class="ti ti-map-pin" style="font-size:11px" aria-hidden="true"></i>
-        <span>0か所</span>
+        <span><span id="pin-count-value">0</span>か所</span>
       </div>
 
       <!-- 右上：ヒートマップ切替（Sprint 6 で機能実装） -->
@@ -251,6 +510,12 @@
         <i class="ti ti-flame" style="font-size:13px" aria-hidden="true"></i>
         <span>ヒートマップ</span>
       </button>
+
+      <!-- 中央上：地図ピックモード時の案内バナー -->
+      <div class="pick-mode-banner" id="pick-mode-banner" hidden>
+        <i class="ti ti-pointer" style="font-size:13px" aria-hidden="true"></i>
+        <span>地図をクリックして訪問場所を追加（Esc でキャンセル）</span>
+      </div>
     </main>
 
     <!-- 右パネル：旅行詳細 -->
@@ -274,6 +539,51 @@
     </aside>
   </div>
 
+  <!-- 旅行登録モーダル -->
+  <div class="modal-backdrop" id="modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title">旅行を追加</span>
+        <button class="icon-btn" id="modal-close-btn" type="button" aria-label="閉じる">
+          <i class="ti ti-x" style="font-size:14px" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-field">
+          <label class="modal-label" for="trip-name">旅行名 <span class="required">*</span></label>
+          <input type="text" id="trip-name" placeholder="春の京都旅" maxlength="100" />
+        </div>
+        <div class="modal-field-row">
+          <div class="modal-field">
+            <label class="modal-label" for="trip-start">開始日 <span class="required">*</span></label>
+            <input type="date" id="trip-start" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label" for="trip-end">終了日 <span class="required">*</span></label>
+            <input type="date" id="trip-end" />
+          </div>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">訪問場所 <span class="required">*</span></label>
+          <div class="search-area">
+            <input type="text" id="place-search" placeholder="住所・地名で検索（例: 清水寺）" autocomplete="off" />
+            <div class="search-result-list" id="search-results" hidden></div>
+          </div>
+          <button class="btn-sm" id="map-pick-btn" type="button" style="margin-top:6px; align-self:flex-start;">
+            <i class="ti ti-map-pin-plus" style="font-size:13px" aria-hidden="true"></i>
+            地図から選ぶ
+          </button>
+          <div class="place-list" id="place-list"></div>
+        </div>
+        <div class="form-error" id="form-error" hidden></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-sm" id="modal-cancel-btn" type="button">キャンセル</button>
+        <button class="btn-primary" id="modal-save-btn" type="button">保存</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Leaflet JS -->
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -282,22 +592,406 @@
   ></script>
 
   <script>
-    // 地図初期化：日本全体がほぼ画面に収まるビュー
-    const map = L.map('map', {
-      center: [36.5, 138.0],
-      zoom: 5,
-      zoomControl: false,
-      worldCopyJump: true,
-    });
+    (() => {
+      'use strict';
 
-    // ズームコントロールは右下に配置（モック準拠 / 左上のピン数バッジとの重なり回避）
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
+      const STORAGE_KEY = 'tabibako_trips';
+      const MAP_DEFAULT_VIEW = { center: [36.5, 138.0], zoom: 5 };
+      const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org';
+      const NOMINATIM_MIN_INTERVAL_MS = 1000; // 公式利用規約：1 req/sec
+      const SEARCH_DEBOUNCE_MS = 500;
 
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(map);
+      const App = {
+        state: {
+          trips: [],
+          draft: null,        // モーダルで編集中の旅行データ
+          pickMode: false,    // 地図クリックで場所追加モード
+        },
+        map: null,
+        draftMarkers: [],
+        el: {},
+        _lastApiRequestAt: 0,
+        _throttleChain: Promise.resolve(),
+        _searchRequestId: 0,
+
+        init() {
+          this.cacheElements();
+          this.storage.load();
+          this.bindEvents();
+          this.mapInit();
+          this.renderTripList();
+        },
+
+        cacheElements() {
+          const ids = [
+            'add-btn', 'trip-list', 'pin-count-value',
+            'modal-backdrop', 'modal-close-btn', 'modal-cancel-btn', 'modal-save-btn',
+            'trip-name', 'trip-start', 'trip-end',
+            'place-search', 'search-results', 'place-list', 'map-pick-btn',
+            'pick-mode-banner', 'form-error',
+          ];
+          ids.forEach(id => { this.el[id] = document.getElementById(id); });
+        },
+
+        bindEvents() {
+          this.el['add-btn'].addEventListener('click', () => this.modalOpen());
+          this.el['modal-close-btn'].addEventListener('click', () => this.modalClose());
+          this.el['modal-cancel-btn'].addEventListener('click', () => this.modalClose());
+          this.el['modal-save-btn'].addEventListener('click', () => this.modalSave());
+          this.el['map-pick-btn'].addEventListener('click', () => this.setPickMode(true));
+
+          // 住所検索（debounce）。空入力時は pending 中の検索も無効化
+          this.el['place-search'].addEventListener('input', this.debounce(() => {
+            const q = this.el['place-search'].value.trim();
+            if (q) {
+              this.searchAddress(q);
+            } else {
+              this._searchRequestId++;
+              this.renderSearchResults(null);
+            }
+          }, SEARCH_DEBOUNCE_MS));
+
+          // Esc：ピックモード解除 or モーダル閉じる
+          document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            if (this.state.pickMode) this.setPickMode(false);
+            else if (!this.el['modal-backdrop'].hidden) this.modalClose();
+          });
+
+          // 背景クリックで閉じる（ピックモード中は無効）
+          this.el['modal-backdrop'].addEventListener('click', (e) => {
+            if (e.target === this.el['modal-backdrop'] && !this.state.pickMode) {
+              this.modalClose();
+            }
+          });
+        },
+
+        // ===== Map =====
+        mapInit() {
+          this.map = L.map('map', {
+            center: MAP_DEFAULT_VIEW.center,
+            zoom: MAP_DEFAULT_VIEW.zoom,
+            zoomControl: false,
+            worldCopyJump: true,
+          });
+          L.control.zoom({ position: 'bottomright' }).addTo(this.map);
+          L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          }).addTo(this.map);
+          this.map.on('click', (e) => this.onMapClick(e));
+        },
+
+        async onMapClick(e) {
+          if (!this.state.pickMode) return;
+          const { lat, lng } = e.latlng;
+          this.setPickMode(false);
+
+          let name = '';
+          try {
+            name = await this.reverseGeocode(lat, lng);
+          } catch (err) {
+            console.warn('逆引きに失敗しました', err);
+          }
+          this.addPlaceToDraft({
+            name: name || `(${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+            lat,
+            lng,
+          });
+        },
+
+        renderDraftPins() {
+          this.draftMarkers.forEach(m => this.map.removeLayer(m));
+          this.draftMarkers = [];
+          const places = this.state.draft?.places || [];
+          places.forEach(p => {
+            const marker = L.marker([p.lat, p.lng], { icon: this.createPinIcon() })
+              .bindPopup(this.escape(p.name))
+              .addTo(this.map);
+            this.draftMarkers.push(marker);
+          });
+          this.renderPinCount();
+        },
+
+        // 地図に表示されているピン数を反映。draft / 選択中の旅行（Sprint 3）共通
+        renderPinCount() {
+          this.el['pin-count-value'].textContent = this.draftMarkers.length;
+        },
+
+        // Tabler Icon ベースのカスタムピン。標準マーカー画像の CDN/CORS 問題を回避し
+        // プロジェクトのアイコンシステムとも統一する
+        createPinIcon() {
+          return L.divIcon({
+            className: 'tabibako-pin',
+            html: '<i class="ti ti-map-pin-filled" aria-hidden="true"></i>',
+            iconSize: [32, 32],
+            iconAnchor: [16, 30],
+            popupAnchor: [0, -28],
+          });
+        },
+
+        // ===== Nominatim API =====
+        // 並行呼び出しを Promise チェーンで直列化し、確実に 1 req/sec を守る。
+        // 直前リンクの拒否は無視（throttle 自体は失敗しない設計）
+        async _throttle() {
+          const next = this._throttleChain.then(async () => {
+            const wait = Math.max(0, NOMINATIM_MIN_INTERVAL_MS - (Date.now() - this._lastApiRequestAt));
+            if (wait > 0) await new Promise(r => setTimeout(r, wait));
+            this._lastApiRequestAt = Date.now();
+          });
+          this._throttleChain = next.catch(() => {});
+          return next;
+        },
+
+        // request ID で「最新の検索だけを反映」する。debounce + throttle の合間に
+        // 入力が変化した場合、古いレスポンスを無視する
+        async searchAddress(query) {
+          const myRequestId = ++this._searchRequestId;
+          this.renderSearchResults('loading');
+          await this._throttle();
+          if (myRequestId !== this._searchRequestId) return;
+          try {
+            const url = `${NOMINATIM_BASE}/search?q=${encodeURIComponent(query)}&format=json&accept-language=ja&limit=5`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (myRequestId !== this._searchRequestId) return;
+            this.renderSearchResults(data);
+          } catch (err) {
+            if (myRequestId !== this._searchRequestId) return;
+            console.error('住所検索に失敗しました', err);
+            this.renderSearchResults([]);
+          }
+        },
+
+        async reverseGeocode(lat, lng) {
+          await this._throttle();
+          const url = `${NOMINATIM_BASE}/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ja`;
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          return data.display_name || '';
+        },
+
+        // ===== Modal =====
+        modalOpen() {
+          this.state.draft = this.createBlankTrip();
+          this.el['trip-name'].value = '';
+          this.el['trip-start'].value = '';
+          this.el['trip-end'].value = '';
+          this.el['place-search'].value = '';
+          this.el['form-error'].hidden = true;
+          this.renderSearchResults(null);
+          this.renderPlaceList();
+          this.renderDraftPins();
+          this.el['modal-backdrop'].hidden = false;
+          this.el['trip-name'].focus();
+        },
+
+        modalClose() {
+          this.setPickMode(false);
+          this.el['modal-backdrop'].hidden = true;
+          this.state.draft = null;
+          this.renderDraftPins();
+        },
+
+        modalSave() {
+          const draft = this.state.draft;
+          if (!draft) return;
+          draft.name = this.el['trip-name'].value.trim();
+          draft.startDate = this.el['trip-start'].value;
+          draft.endDate = this.el['trip-end'].value;
+
+          const error = this.validateDraft(draft);
+          if (error) {
+            this.el['form-error'].textContent = error;
+            this.el['form-error'].hidden = false;
+            return;
+          }
+
+          this.state.trips.push(draft);
+          this.storage.save();
+          this.renderTripList();
+          this.modalClose();
+        },
+
+        validateDraft(draft) {
+          if (!draft.name) return '旅行名を入力してください';
+          if (!draft.startDate) return '開始日を入力してください';
+          if (!draft.endDate) return '終了日を入力してください';
+          if (draft.startDate > draft.endDate) return '終了日は開始日以降にしてください';
+          if (draft.places.length === 0) return '訪問場所を 1 件以上追加してください';
+          return null;
+        },
+
+        createBlankTrip() {
+          return {
+            id: crypto.randomUUID(),
+            name: '',
+            startDate: '',
+            endDate: '',
+            places: [],
+            prefectures: [],   // Sprint 5 で自動判定
+            accommodation: '', // Sprint 4
+            transport: [],     // Sprint 4
+            companions: [],    // Sprint 4
+            tags: [],          // Sprint 4
+            memo: '',          // Sprint 4
+            photos: [],        // Sprint 4
+          };
+        },
+
+        // ===== Pick Mode =====
+        setPickMode(on) {
+          this.state.pickMode = on;
+          document.body.classList.toggle('pick-mode', on);
+          this.el['modal-backdrop'].classList.toggle('pick-mode', on);
+          this.el['pick-mode-banner'].hidden = !on;
+        },
+
+        // ===== Draft places =====
+        addPlaceToDraft(place) {
+          if (!this.state.draft) return;
+          this.state.draft.places.push(place);
+          this.el['place-search'].value = '';
+          this.renderSearchResults(null);
+          this.renderPlaceList();
+          this.renderDraftPins();
+        },
+
+        removePlaceFromDraft(index) {
+          if (!this.state.draft) return;
+          this.state.draft.places.splice(index, 1);
+          this.renderPlaceList();
+          this.renderDraftPins();
+        },
+
+        // ===== Storage =====
+        storage: {
+          load() {
+            try {
+              const raw = localStorage.getItem(STORAGE_KEY);
+              App.state.trips = raw ? JSON.parse(raw) : [];
+            } catch (err) {
+              console.error('localStorage の読み込みに失敗', err);
+              App.state.trips = [];
+            }
+          },
+          save() {
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state.trips));
+            } catch (err) {
+              console.error('localStorage の書き込みに失敗', err);
+              alert('保存に失敗しました（localStorage の容量制限の可能性があります）');
+            }
+          },
+        },
+
+        // ===== Rendering =====
+        renderTripList() {
+          const container = this.el['trip-list'];
+          const trips = this.state.trips;
+          if (trips.length === 0) {
+            container.innerHTML = `
+              <div class="trip-list-empty">
+                まだ旅行が登録されていません。<br />
+                ＋ボタンから追加できるようになります。
+              </div>
+            `;
+            return;
+          }
+          container.innerHTML = trips.map(trip => `
+            <div class="trip-card" data-trip-id="${this.escape(trip.id)}">
+              <div class="trip-card-name">${this.escape(trip.name)}</div>
+              <div class="trip-card-meta">
+                <div class="trip-card-meta-row">
+                  <i class="ti ti-calendar" style="font-size:11px" aria-hidden="true"></i>
+                  <span>${this.escape(trip.startDate)} 〜 ${this.escape(trip.endDate)}</span>
+                </div>
+                <div class="trip-card-meta-row">
+                  <i class="ti ti-map-pin" style="font-size:11px" aria-hidden="true"></i>
+                  <span>訪問場所 ${trip.places.length} か所</span>
+                </div>
+              </div>
+            </div>
+          `).join('');
+        },
+
+        renderPlaceList() {
+          const container = this.el['place-list'];
+          const places = this.state.draft?.places || [];
+          container.innerHTML = places.map((p, i) => `
+            <div class="place-item">
+              <span class="place-item-name">${this.escape(p.name)}</span>
+              <button class="place-item-remove" type="button" data-index="${i}" aria-label="削除">
+                <i class="ti ti-x" style="font-size:12px" aria-hidden="true"></i>
+              </button>
+            </div>
+          `).join('');
+          container.querySelectorAll('.place-item-remove').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const idx = parseInt(btn.dataset.index, 10);
+              this.removePlaceFromDraft(idx);
+            });
+          });
+        },
+
+        renderSearchResults(items) {
+          const container = this.el['search-results'];
+
+          if (items === null) {
+            container.hidden = true;
+            container.innerHTML = '';
+            return;
+          }
+          if (items === 'loading') {
+            container.hidden = false;
+            container.innerHTML = '<div class="search-result-loading">検索中…</div>';
+            return;
+          }
+          if (items.length === 0) {
+            container.hidden = false;
+            container.innerHTML = '<div class="search-result-empty">該当する場所が見つかりませんでした</div>';
+            return;
+          }
+          container.hidden = false;
+          container.innerHTML = items.map((item, i) => `
+            <div class="search-result-item" data-index="${i}">${this.escape(item.display_name)}</div>
+          `).join('');
+          container.querySelectorAll('.search-result-item').forEach((el, i) => {
+            el.addEventListener('click', () => {
+              const item = items[i];
+              this.addPlaceToDraft({
+                name: item.display_name,
+                lat: parseFloat(item.lat),
+                lng: parseFloat(item.lon),
+              });
+            });
+          });
+        },
+
+        // ===== Helpers =====
+        debounce(fn, ms) {
+          let timer;
+          return (...args) => {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn(...args), ms);
+          };
+        },
+
+        escape(str) {
+          if (str == null) return '';
+          return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+        },
+      };
+
+      document.addEventListener('DOMContentLoaded', () => App.init());
+    })();
   </script>
 </body>
 </html>
