@@ -535,6 +535,12 @@
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
       line-height: 1;
     }
+    .tabibako-pin-dim .ti {
+      color: #9bb0c4;
+    }
+    .tabibako-pin-selected .ti {
+      color: #e05c00;
+    }
 
     /* ===== 地図ピックモード ===== */
     body.pick-mode #map { cursor: crosshair; }
@@ -1311,20 +1317,29 @@
           this.renderPinCount();
         },
 
-        // 選択中の旅行の訪問場所をピン表示。renderDraftPins と同じピン意匠だが
-        // 別レイヤーで管理（draft 追加中も選択中の旅行ピンは残せる）
+        // フィルター済み全旅行の訪問場所をピン表示。
+        // 未選択時：全旅行を同色（青）で表示。ポップアップに旅行名を含める。
+        // 選択中時：選択旅行をオレンジ、他をグレー青で表示。
+        // 別レイヤーで管理（draft 追加中も旅行ピンは残せる）
         renderSelectedTripPins() {
           this.selectedTripMarkers.forEach(m => this.map.removeLayer(m));
           this.selectedTripMarkers = [];
-          const trip = this.getSelectedTrip();
-          if (trip) {
-            trip.places.forEach(p => {
-              const marker = L.marker([p.lat, p.lng], { icon: this.createPinIcon() })
-                .bindPopup(this.escape(p.name))
+          const selectedId = this.state.selectedTripId;
+          let trips = this.filter.apply(this.state.trips);
+          trips = this.sort.apply(trips);
+          trips.forEach(trip => {
+            const isSelected = trip.id === selectedId;
+            const variant = !selectedId ? undefined : (isSelected ? 'selected' : 'dim');
+            (trip.places || []).forEach(p => {
+              const popupText = selectedId
+                ? this.escape(p.name)
+                : `${this.escape(trip.name)}：${this.escape(p.name)}`;
+              const marker = L.marker([p.lat, p.lng], { icon: this.createPinIcon(variant) })
+                .bindPopup(popupText)
                 .addTo(this.map);
               this.selectedTripMarkers.push(marker);
             });
-          }
+          });
           this.renderPinCount();
         },
 
@@ -1336,9 +1351,12 @@
 
         // Tabler Icon ベースのカスタムピン。標準マーカー画像の CDN/CORS 問題を回避し
         // プロジェクトのアイコンシステムとも統一する
-        createPinIcon() {
+        createPinIcon(variant) {
+          const extraClass = variant === 'selected' ? ' tabibako-pin-selected'
+                           : variant === 'dim'      ? ' tabibako-pin-dim'
+                           : '';
           return L.divIcon({
-            className: 'tabibako-pin',
+            className: 'tabibako-pin' + extraClass,
             html: '<i class="ti ti-map-pin-filled" aria-hidden="true"></i>',
             iconSize: [32, 32],
             iconAnchor: [16, 30],
@@ -2535,6 +2553,8 @@
 
         // ===== Rendering =====
         renderTripList() {
+          // ピンをリスト変化と常に連動させる（フィルター・ソート・追加・削除すべてに対応）
+          this.renderSelectedTripPins();
           // 絞り込み UI を最新の値プールで再描画
           this.filter.render();
 
