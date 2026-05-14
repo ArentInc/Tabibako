@@ -196,6 +196,48 @@
       color: var(--color-text-secondary);
       line-height: 1.6;
     }
+    .detail-content {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .detail-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      word-break: break-word;
+    }
+    .detail-section {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .detail-section-label {
+      font-size: 11px;
+      color: var(--color-text-secondary);
+      font-weight: 500;
+    }
+    .detail-section-value {
+      font-size: 12px;
+      color: var(--color-text-primary);
+    }
+    .detail-place-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .detail-place-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      background: var(--color-background-secondary);
+      border-radius: var(--border-radius-md);
+      font-size: 12px;
+      color: var(--color-text-primary);
+      word-break: break-word;
+    }
     .detail-footer {
       padding: 8px 12px;
       border-top: 0.5px solid var(--color-border-tertiary);
@@ -232,13 +274,21 @@
     .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
     /* ===== 旅行カード（左パネル）===== */
-    /* Sprint 2 では描画のみ。クリック選択（cursor / hover / selected）は Sprint 3 で追加 */
     .trip-card {
       padding: 10px;
       margin-bottom: 6px;
       border: 0.5px solid var(--color-border-tertiary);
       border-radius: var(--border-radius-md);
       background: var(--color-background-primary);
+      cursor: pointer;
+      transition: border-color 0.12s, background 0.12s;
+    }
+    .trip-card:hover {
+      background: var(--color-background-secondary);
+    }
+    .trip-card.selected {
+      border-color: var(--color-border-info);
+      background: var(--color-background-info);
     }
     .trip-card-name {
       font-size: 13px;
@@ -523,7 +573,7 @@
       <div class="photo-viewer">
         <i class="ti ti-photo" style="font-size:36px; opacity:0.4" aria-hidden="true"></i>
       </div>
-      <div class="detail-body">
+      <div class="detail-body" id="detail-body">
         <div class="detail-empty">
           旅行を選択すると、<br />ここに詳細が表示されます。
         </div>
@@ -604,11 +654,13 @@
       const App = {
         state: {
           trips: [],
-          draft: null,        // モーダルで編集中の旅行データ
-          pickMode: false,    // 地図クリックで場所追加モード
+          draft: null,             // モーダルで編集中の旅行データ
+          pickMode: false,         // 地図クリックで場所追加モード
+          selectedTripId: null,    // 左パネルで選択中の旅行 ID（null = 未選択）
         },
         map: null,
         draftMarkers: [],
+        selectedTripMarkers: [],
         el: {},
         _lastApiRequestAt: 0,
         _throttleChain: Promise.resolve(),
@@ -624,7 +676,7 @@
 
         cacheElements() {
           const ids = [
-            'add-btn', 'trip-list', 'pin-count-value',
+            'add-btn', 'trip-list', 'pin-count-value', 'detail-body',
             'modal-backdrop', 'modal-close-btn', 'modal-cancel-btn', 'modal-save-btn',
             'trip-name', 'trip-start', 'trip-end',
             'place-search', 'search-results', 'place-list', 'map-pick-btn',
@@ -639,6 +691,13 @@
           this.el['modal-cancel-btn'].addEventListener('click', () => this.modalClose());
           this.el['modal-save-btn'].addEventListener('click', () => this.modalSave());
           this.el['map-pick-btn'].addEventListener('click', () => this.setPickMode(true));
+
+          // 旅行カードのクリック（event delegation: 動的に追加されるカードに自動対応）
+          this.el['trip-list'].addEventListener('click', (e) => {
+            const card = e.target.closest('.trip-card');
+            if (!card) return;
+            this.selectTrip(card.dataset.tripId);
+          });
 
           // 住所検索（debounce）。空入力時は pending 中の検索も無効化
           this.el['place-search'].addEventListener('input', this.debounce(() => {
@@ -713,9 +772,27 @@
           this.renderPinCount();
         },
 
-        // 地図に表示されているピン数を反映。draft / 選択中の旅行（Sprint 3）共通
+        // 選択中の旅行の訪問場所をピン表示。renderDraftPins と同じピン意匠だが
+        // 別レイヤーで管理（draft 追加中も選択中の旅行ピンは残せる）
+        renderSelectedTripPins() {
+          this.selectedTripMarkers.forEach(m => this.map.removeLayer(m));
+          this.selectedTripMarkers = [];
+          const trip = this.getSelectedTrip();
+          if (trip) {
+            trip.places.forEach(p => {
+              const marker = L.marker([p.lat, p.lng], { icon: this.createPinIcon() })
+                .bindPopup(this.escape(p.name))
+                .addTo(this.map);
+              this.selectedTripMarkers.push(marker);
+            });
+          }
+          this.renderPinCount();
+        },
+
+        // 地図に表示されているピン数を反映。draft + 選択中の旅行を合算
         renderPinCount() {
-          this.el['pin-count-value'].textContent = this.draftMarkers.length;
+          this.el['pin-count-value'].textContent =
+            this.draftMarkers.length + this.selectedTripMarkers.length;
         },
 
         // Tabler Icon ベースのカスタムピン。標準マーカー画像の CDN/CORS 問題を回避し
@@ -841,6 +918,20 @@
           };
         },
 
+        // ===== Trip Selection =====
+        // 同じ ID をもう一度クリックで解除（toggle）。pin / 右パネルは Task #3/#5 で連動
+        selectTrip(tripId) {
+          this.state.selectedTripId = (this.state.selectedTripId === tripId) ? null : tripId;
+          this.renderTripList();
+          this.renderSelectedTripPins();
+          this.renderTripDetail();
+        },
+
+        getSelectedTrip() {
+          if (!this.state.selectedTripId) return null;
+          return this.state.trips.find(t => t.id === this.state.selectedTripId) || null;
+        },
+
         // ===== Pick Mode =====
         setPickMode(on) {
           this.state.pickMode = on;
@@ -900,8 +991,9 @@
             `;
             return;
           }
+          const selectedId = this.state.selectedTripId;
           container.innerHTML = trips.map(trip => `
-            <div class="trip-card" data-trip-id="${this.escape(trip.id)}">
+            <div class="trip-card${trip.id === selectedId ? ' selected' : ''}" data-trip-id="${this.escape(trip.id)}">
               <div class="trip-card-name">${this.escape(trip.name)}</div>
               <div class="trip-card-meta">
                 <div class="trip-card-meta-row">
@@ -915,6 +1007,41 @@
               </div>
             </div>
           `).join('');
+        },
+
+        // 右パネル詳細：選択中の旅行の情報を描画。Sprint 4 で transport/companions/memo/photos 追加
+        renderTripDetail() {
+          const container = this.el['detail-body'];
+          const trip = this.getSelectedTrip();
+          if (!trip) {
+            container.innerHTML = `
+              <div class="detail-empty">
+                旅行を選択すると、<br />ここに詳細が表示されます。
+              </div>
+            `;
+            return;
+          }
+          const placeListHtml = trip.places.map(p => `
+            <li class="detail-place-item">
+              <i class="ti ti-map-pin" style="font-size:11px" aria-hidden="true"></i>
+              <span>${this.escape(p.name)}</span>
+            </li>
+          `).join('');
+          container.innerHTML = `
+            <div class="detail-content">
+              <h2 class="detail-title">${this.escape(trip.name)}</h2>
+              <div class="detail-section">
+                <div class="detail-section-label">日程</div>
+                <div class="detail-section-value">
+                  ${this.escape(trip.startDate)} 〜 ${this.escape(trip.endDate)}
+                </div>
+              </div>
+              <div class="detail-section">
+                <div class="detail-section-label">訪問場所（${trip.places.length} か所）</div>
+                <ul class="detail-place-list">${placeListHtml}</ul>
+              </div>
+            </div>
+          `;
         },
 
         renderPlaceList() {
