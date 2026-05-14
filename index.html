@@ -164,6 +164,12 @@
       white-space: nowrap;
     }
     .map-heatmap-btn:hover { background: var(--color-background-secondary); }
+    .map-heatmap-btn.active {
+      background: var(--color-background-info);
+      color: var(--color-text-info);
+      border-color: var(--color-border-info);
+    }
+    .map-heatmap-btn.active:hover { background: var(--color-background-info-hover); }
 
     /* Leaflet 標準のズームコントロールはモックの右下配置にあわせて調整 */
     .leaflet-bottom.leaflet-right { margin: 0 8px 12px 0; }
@@ -1112,6 +1118,8 @@
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
     crossorigin=""
   ></script>
+  <!-- Leaflet.heat プラグイン（Sprint 6 ヒートマップ用）。L.heatLayer を提供 -->
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 
   <script>
     (() => {
@@ -1157,12 +1165,15 @@
           this.cacheElements();
           this.storage.load();
           this.filter.load();
+          this.heatmap.init();
           await this.photoDB.init();
           this.bindEvents();
           this.photoViewer.bindEvents();
           this.sort.bindEvents();
           this.filter.bindEvents();
+          this.heatmap.bindEvents();
           this.mapInit();
+          this.heatmap.render(); // 永続化された状態を地図初期化後に反映
           this.renderTripList();
           this.updateActionButtons();
         },
@@ -1170,7 +1181,7 @@
         cacheElements() {
           const ids = [
             'add-btn', 'trip-list', 'pin-count-value', 'detail-body', 'photo-viewer',
-            'edit-btn', 'delete-btn',
+            'edit-btn', 'delete-btn', 'heatmap-btn',
             'sort-btn', 'sort-dropdown', 'filter-section',
             'modal-backdrop', 'modal-close-btn', 'modal-cancel-btn', 'modal-save-btn',
             'modal-title',
@@ -1313,11 +1324,12 @@
 
         // 選択中の旅行の訪問場所をピン表示。renderDraftPins と同じピン意匠だが
         // 別レイヤーで管理（draft 追加中も選択中の旅行ピンは残せる）
+        // ヒートマップ ON 時は個別ピンを隠して俯瞰モードを優先
         renderSelectedTripPins() {
           this.selectedTripMarkers.forEach(m => this.map.removeLayer(m));
           this.selectedTripMarkers = [];
           const trip = this.getSelectedTrip();
-          if (trip) {
+          if (trip && !this.heatmap.isEnabled()) {
             trip.places.forEach(p => {
               const marker = L.marker([p.lat, p.lng], { icon: this.createPinIcon() })
                 .bindPopup(this.escape(p.name))
@@ -1560,6 +1572,23 @@
           this.renderTripDetail();
           this.photoViewer.load(this.getSelectedTrip());
           this.updateActionButtons();
+          this.fitMapToSelectedTrip();
+        },
+
+        // 選択中の旅行の全 places が画面内に収まるよう地図ビューを調整。
+        // ヒートマップ ON 時は俯瞰モード優先で何もしない
+        fitMapToSelectedTrip() {
+          if (this.heatmap.isEnabled()) return;
+          const trip = this.getSelectedTrip();
+          if (!trip) return;
+          const places = trip.places || [];
+          if (places.length === 0) return;
+          if (places.length === 1) {
+            this.map.setView([places[0].lat, places[0].lng], 12);
+            return;
+          }
+          const bounds = L.latLngBounds(places.map(p => [p.lat, p.lng]));
+          this.map.fitBounds(bounds, { padding: [40, 40] });
         },
 
         // 右パネル下部の編集・削除ボタンの活性状態を選択状況に同期
@@ -1567,6 +1596,15 @@
           const hasSelection = !!this.state.selectedTripId;
           if (this.el['edit-btn']) this.el['edit-btn'].disabled = !hasSelection;
           if (this.el['delete-btn']) this.el['delete-btn'].disabled = !hasSelection;
+        },
+
+        // ヒートマップボタンの active 表示を状態に同期
+        updateHeatmapButton() {
+          const btn = this.el['heatmap-btn'];
+          if (!btn) return;
+          const on = this.heatmap.isEnabled();
+          btn.classList.toggle('active', on);
+          btn.setAttribute('aria-pressed', String(on));
         },
 
         // 選択中の旅行を削除（確認ダイアログ → localStorage 保存 → IDB 写真クリーンアップ）
@@ -2533,10 +2571,73 @@
           },
         },
 
+        // ===== ヒートマップ（Leaflet.heat 経由）=====
+        // ON 時：フィルタ適用後の全旅行の places をヒートマップ表示。選択中のピンは隠す
+        heatmap: {
+          STORAGE_KEY: 'tabibako_heatmap',
+          _enabled: false,
+          _layer: null,
+          _eventsBound: false,
+
+          init() {
+            this._enabled = localStorage.getItem(this.STORAGE_KEY) === 'true';
+          },
+
+          save() {
+            try { localStorage.setItem(this.STORAGE_KEY, String(this._enabled)); }
+            catch (err) { console.error('ヒートマップ状態の保存失敗', err); }
+          },
+
+          isEnabled() { return this._enabled; },
+
+          // フィルタ適用後の全旅行の places を [lat, lng] に展開
+          getPoints() {
+            const trips = App.filter.apply(App.state.trips);
+            return trips.flatMap(t => (t.places || []).map(p => [p.lat, p.lng]));
+          },
+
+          render() {
+            // 旧レイヤーを必ず除去
+            if (this._layer) {
+              App.map.removeLayer(this._layer);
+              this._layer = null;
+            }
+            if (!this._enabled) return;
+            const points = this.getPoints();
+            if (points.length === 0) return;
+            // 少量データでも視認できるよう radius / blur / minOpacity を強め設定
+            this._layer = L.heatLayer(points, {
+              radius: 35,
+              blur: 25,
+              maxZoom: 17,
+              minOpacity: 0.35,
+            }).addTo(App.map);
+          },
+
+          toggle() {
+            this._enabled = !this._enabled;
+            this.save();
+            this.render();
+            App.renderSelectedTripPins();    // ON 時は個別ピンを隠すため再描画
+            App.updateHeatmapButton();
+          },
+
+          bindEvents() {
+            if (this._eventsBound) return;
+            this._eventsBound = true;
+            const btn = App.el['heatmap-btn'];
+            if (!btn) return;
+            btn.addEventListener('click', () => this.toggle());
+            App.updateHeatmapButton();
+          },
+        },
+
         // ===== Rendering =====
         renderTripList() {
           // 絞り込み UI を最新の値プールで再描画
           this.filter.render();
+          // ヒートマップもフィルタ変更・旅行追加削除に追従させる
+          this.heatmap.render();
 
           const container = this.el['trip-list'];
           if (this.state.trips.length === 0) {
@@ -2792,6 +2893,138 @@
       };
 
       document.addEventListener('DOMContentLoaded', () => App.init());
+
+      // ===== Dev ヘルパ（コンソールから手動実行）=====
+      // window.devLoadSamples(): 日本各地 + 海外を含む 12 件のサンプル旅行を追加
+      // window.devClearAll():    全データ（旅行・値プール・写真・絞り込み/ソート状態）を消去
+      window.devLoadSamples = function () {
+        const samples = [
+          { name: '京都の春', startDate: '2024-04-10', endDate: '2024-04-12',
+            places: [
+              ['清水寺, 八坂上町, 東山区, 京都市, 京都府, 日本', 34.9949, 135.7850],
+              ['金閣寺, 金閣寺町, 北区, 京都市, 京都府, 日本', 35.0394, 135.7292],
+              ['伏見稲荷大社, 深草, 伏見区, 京都市, 京都府, 日本', 34.9671, 135.7727],
+            ],
+            transport: ['電車', '徒歩'], companions: ['一人'], tags: ['寺社', '春'] },
+          { name: '東京日帰り', startDate: '2024-05-18', endDate: '2024-05-18',
+            places: [
+              ['渋谷駅, 渋谷区, 東京都, 日本', 35.6595, 139.7005],
+              ['新宿御苑, 新宿区, 東京都, 日本', 35.6852, 139.7100],
+            ],
+            transport: ['電車'], companions: ['友人A'], tags: [] },
+          { name: '東京家族旅行', startDate: '2024-08-02', endDate: '2024-08-04',
+            places: [
+              ['浅草寺, 浅草, 台東区, 東京都, 日本', 35.7148, 139.7967],
+              ['東京タワー, 港区, 東京都, 日本', 35.6586, 139.7454],
+              ['お台場海浜公園, 港区, 東京都, 日本', 35.6298, 139.7741],
+              ['東京駅, 千代田区, 東京都, 日本', 35.6812, 139.7671],
+            ],
+            transport: ['電車', '徒歩'], companions: ['家族'], tags: ['夏休み'] },
+          { name: '大阪グルメ', startDate: '2024-09-21', endDate: '2024-09-22',
+            places: [
+              ['道頓堀, 中央区, 大阪市, 大阪府, 日本', 34.6687, 135.5024],
+              ['大阪城, 中央区, 大阪市, 大阪府, 日本', 34.6873, 135.5262],
+              ['通天閣, 浪速区, 大阪市, 大阪府, 日本', 34.6525, 135.5063],
+            ],
+            transport: ['電車'], companions: ['友人A', '友人B'], tags: ['グルメ'] },
+          { name: 'USJと京都', startDate: '2024-11-08', endDate: '2024-11-10',
+            places: [
+              ['ユニバーサル・スタジオ・ジャパン, 此花区, 大阪市, 大阪府, 日本', 34.6655, 135.4324],
+              ['清水寺, 八坂上町, 東山区, 京都市, 京都府, 日本', 34.9949, 135.7850],
+            ],
+            transport: ['電車', 'バス'], companions: ['田中さん'], tags: ['テーマパーク', '寺社'] },
+          { name: '札幌冬旅', startDate: '2025-02-05', endDate: '2025-02-07',
+            places: [
+              ['さっぽろテレビ塔, 中央区, 札幌市, 北海道, 日本', 43.0613, 141.3565],
+              ['札幌大通公園, 中央区, 札幌市, 北海道, 日本', 43.0606, 141.3540],
+              ['小樽運河, 小樽市, 北海道, 日本', 43.1907, 140.9947],
+            ],
+            transport: ['飛行機', '電車'], companions: ['家族'], tags: ['雪'] },
+          { name: '沖縄バカンス', startDate: '2024-07-15', endDate: '2024-07-18',
+            places: [
+              ['首里城, 那覇市, 沖縄県, 日本', 26.2173, 127.7196],
+              ['国際通り, 那覇市, 沖縄県, 日本', 26.2124, 127.6809],
+              ['美ら海水族館, 国頭郡, 沖縄県, 日本', 26.6940, 127.8779],
+            ],
+            transport: ['飛行機', '車'], companions: ['家族'], tags: ['海', '夏休み'] },
+          { name: '福岡屋台', startDate: '2024-10-12', endDate: '2024-10-13',
+            places: [
+              ['博多駅, 博多区, 福岡市, 福岡県, 日本', 33.5904, 130.4017],
+              ['太宰府天満宮, 太宰府市, 福岡県, 日本', 33.5314, 130.5346],
+              ['天神, 中央区, 福岡市, 福岡県, 日本', 33.5904, 130.3989],
+            ],
+            transport: ['飛行機', '電車'], companions: ['一人'], tags: ['グルメ', '寺社'] },
+          { name: '広島平和記念', startDate: '2024-03-20', endDate: '2024-03-21',
+            places: [
+              ['広島平和記念公園, 中区, 広島市, 広島県, 日本', 34.3955, 132.4536],
+              ['宮島, 廿日市市, 広島県, 日本', 34.2961, 132.3198],
+            ],
+            transport: ['電車', '船'], companions: ['一人'], tags: ['歴史'] },
+          { name: '仙台牛タン', startDate: '2024-06-08', endDate: '2024-06-09',
+            places: [
+              ['仙台駅, 青葉区, 仙台市, 宮城県, 日本', 38.2606, 140.8819],
+              ['松島, 宮城郡, 宮城県, 日本', 38.3711, 141.0633],
+            ],
+            transport: ['電車'], companions: ['田中さん'], tags: ['グルメ'] },
+          { name: '名古屋', startDate: '2024-12-22', endDate: '2024-12-23',
+            places: [
+              ['名古屋城, 中区, 名古屋市, 愛知県, 日本', 35.1856, 136.8995],
+              ['熱田神宮, 熱田区, 名古屋市, 愛知県, 日本', 35.1278, 136.9085],
+            ],
+            transport: ['電車'], companions: ['一人'], tags: ['寺社'] },
+          { name: 'パリ旅行', startDate: '2024-09-01', endDate: '2024-09-07',
+            places: [
+              ['Eiffel Tower, Champ de Mars, Paris, France', 48.8584, 2.2945],
+              ['Louvre Museum, Rue de Rivoli, Paris, France', 48.8606, 2.3376],
+              ['Notre-Dame Cathedral, Île de la Cité, Paris, France', 48.8530, 2.3499],
+            ],
+            transport: ['飛行機', '徒歩'], companions: ['家族'], tags: ['海外', '美術館'] },
+        ];
+
+        const trips = samples.map(s => {
+          const places = s.places.map(([name, lat, lng]) => ({
+            name, lat, lng, region: App.extractRegion(name),
+          }));
+          return {
+            id: 'sample-' + crypto.randomUUID(),
+            name: s.name, startDate: s.startDate, endDate: s.endDate, places,
+            regions: [...new Set(places.map(p => p.region).filter(Boolean))],
+            accommodation: '',
+            transport: s.transport || [], companions: s.companions || [], tags: s.tags || [],
+            memo: '', photos: [],
+          };
+        });
+
+        App.state.trips = [...App.state.trips, ...trips];
+
+        // 値プールにも未登録の値を追加
+        for (const cat of ['transport', 'companions', 'tags']) {
+          const set = new Set(App.multiSelect.getPool(cat));
+          for (const t of trips) for (const v of (t[cat] || [])) set.add(v);
+          App.multiSelect.savePool(cat, [...set]);
+        }
+
+        App.storage.save();
+        App.renderTripList();
+        console.log(`サンプル ${trips.length} 旅行を追加しました。ヒートマップボタンを押して確認できます。`);
+      };
+
+      window.devClearAll = async function () {
+        if (!confirm('すべてのデータ（旅行・値プール・写真・絞り込み/ソート状態）を消去します。よろしいですか？')) return;
+        ['tabibako_trips', 'tabibako_transport_pool', 'tabibako_companions_pool', 'tabibako_tags_pool',
+          'tabibako_sort', 'tabibako_filter', 'tabibako_heatmap'].forEach(k => localStorage.removeItem(k));
+        try {
+          const db = App.photoDB._db;
+          if (db) {
+            const tx = db.transaction('photos', 'readwrite');
+            tx.objectStore('photos').clear();
+            await new Promise(r => { tx.oncomplete = r; });
+          }
+        } catch (err) {
+          console.warn('IDB クリアで例外:', err);
+        }
+        console.log('全データクリア完了。ページをリロードしてください（F5）。');
+      };
     })();
   </script>
 </body>
