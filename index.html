@@ -44,6 +44,8 @@
       --color-text-tag: #3c3489;
       --color-text-photo-placeholder: #88aabb;
       --color-text-error: #c53030;
+      --color-pin-dim: #9bb0c4;
+      --color-pin-selected: #e05c00;
 
       --border-radius-md: 6px;
       --border-radius-lg: 10px;
@@ -529,7 +531,7 @@
       color: var(--color-text-tag);
     }
 
-    /* ===== 地図ピン（Tabler Icon ベース）===== */
+    /* ===== 地図ピン（Tabler Icon ベース・3 バリアント）===== */
     /* L.divIcon の親要素。.leaflet-div-icon の白背景・枠線を打ち消す */
     .tabibako-pin {
       background: transparent;
@@ -540,6 +542,15 @@
       color: var(--color-text-info);
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
       line-height: 1;
+    }
+    /* 未選択時の全旅行ピン（変化なし、デフォルト青） */
+    .tabibako-pin-default .ti { color: var(--color-text-info); }
+    /* 選択時の他旅行ピン（控えめにグレー青で背景化） */
+    .tabibako-pin-dim .ti { color: var(--color-pin-dim); }
+    /* 選択中の旅行のピン（強調オレンジ） */
+    .tabibako-pin-selected .ti {
+      color: var(--color-pin-selected);
+      font-size: 36px;
     }
 
     /* ===== 地図ピックモード ===== */
@@ -1323,21 +1334,38 @@
           this.renderPinCount();
         },
 
-        // 選択中の旅行の訪問場所をピン表示。renderDraftPins と同じピン意匠だが
-        // 別レイヤーで管理（draft 追加中も選択中の旅行ピンは残せる）
-        // ヒートマップ ON 時は個別ピンを隠して俯瞰モードを優先
+        // フィルター済み全旅行のピンを地図に表示（Issue #5 の方針）。
+        // - 未選択時：全件を default 青で表示
+        // - 選択時：選択旅行を selected オレンジ、他旅行を dim グレー青で表示
+        // - ヒートマップ ON 時：俯瞰モード優先で全ピン非表示
+        // - モーダル open 中（draft あり）：draft ピンに集中するため全ピン非表示
         renderSelectedTripPins() {
           this.selectedTripMarkers.forEach(m => this.map.removeLayer(m));
           this.selectedTripMarkers = [];
-          const trip = this.getSelectedTrip();
-          if (trip && !this.heatmap.isEnabled()) {
-            trip.places.forEach(p => {
-              const marker = L.marker([p.lat, p.lng], { icon: this.createPinIcon() })
-                .bindPopup(this.escape(p.name))
+
+          if (this.state.draft || this.heatmap.isEnabled()) {
+            this.renderPinCount();
+            return;
+          }
+
+          const trips = this.filter.apply(this.state.trips);
+          const selectedId = this.state.selectedTripId;
+
+          trips.forEach(trip => {
+            let variant;
+            if (selectedId === null) variant = 'default';
+            else if (trip.id === selectedId) variant = 'selected';
+            else variant = 'dim';
+
+            (trip.places || []).forEach(p => {
+              const popupContent = `${this.escape(trip.name)}：${this.escape(p.name)}`;
+              const marker = L.marker([p.lat, p.lng], { icon: this.createPinIcon(variant) })
+                .bindPopup(popupContent)
                 .addTo(this.map);
               this.selectedTripMarkers.push(marker);
             });
-          }
+          });
+
           this.renderPinCount();
         },
 
@@ -1349,9 +1377,10 @@
 
         // Tabler Icon ベースのカスタムピン。標準マーカー画像の CDN/CORS 問題を回避し
         // プロジェクトのアイコンシステムとも統一する
-        createPinIcon() {
+        // variant: 'default' | 'dim' | 'selected'
+        createPinIcon(variant = 'default') {
           return L.divIcon({
-            className: 'tabibako-pin',
+            className: `tabibako-pin tabibako-pin-${variant}`,
             html: '<i class="ti ti-map-pin-filled" aria-hidden="true"></i>',
             iconSize: [32, 32],
             iconAnchor: [16, 30],
@@ -1412,25 +1441,23 @@
             return;
           }
 
-          // 編集モード時は selected の重複ピン表示を避けるため selection を一時クリア。
-          // modalClose で復元する
+          // モーダル open 前の selectedTripId を保持（modalClose で復元）
           this._preModalSelectedId = this.state.selectedTripId;
-          if (editing) {
-            this.state.selectedTripId = null;
-            this.renderTripList();
-            this.renderSelectedTripPins();
-            this.renderTripDetail();
-            this.photoViewer.clear();
-          }
 
-          // 編集 trip のディープクローン（保存まで原本に触らない）
+          // draft / editing state を先にセット。これにより renderSelectedTripPins の
+          // state.draft 分岐で全ピン表示が抑制される（draft pins だけが地図に出る）
           this.state.draft = editing
             ? JSON.parse(JSON.stringify(existing))
             : this.createBlankTrip();
           this.state.editingTripId = editing ? tripId : null;
-          this.state.editingOriginalPhotoIds = editing
-            ? (existing.photos || []).map(p => p.id)
-            : [];
+          this.state.editingOriginalPhotoIds = editing ? (existing.photos || []).map(p => p.id) : [];
+
+          // 編集モード：右パネルと写真ビューアは編集中なのでクリア
+          if (editing) {
+            this.state.selectedTripId = null;
+            this.renderTripDetail();
+            this.photoViewer.clear();
+          }
 
           // フォームフィールドにデータを反映
           const draft = this.state.draft;
@@ -1443,6 +1470,9 @@
           this.el['form-error'].hidden = true;
           this.el['modal-title'].textContent = editing ? '旅行を編集' : '旅行を追加';
 
+          // UI 再描画。renderTripList 内で renderSelectedTripPins が呼ばれるが
+          // state.draft が truthy なので全ピン表示は抑制される
+          this.renderTripList();
           this.renderSearchResults(null);
           this.renderPlaceList();
           this.renderDraftPins();
@@ -1476,11 +1506,11 @@
           this._preModalSelectedId = null;
           if (restoreId) {
             this.state.selectedTripId = restoreId;
-            this.renderTripList();
-            this.renderSelectedTripPins();
             this.renderTripDetail();
             this.photoViewer.load(this.getSelectedTrip());
           }
+          // 全ピン表示を復元（state.draft null）。selectedTripId 復元の有無に関わらず必要
+          this.renderTripList();
           this.updateActionButtons();
         },
 
@@ -2645,6 +2675,8 @@
         renderTripList() {
           // 絞り込み UI を最新の値プールで再描画
           this.filter.render();
+          // フィルター変更・旅行追加削除に応じて地図ピンも更新（Issue #5 で連動化）
+          this.renderSelectedTripPins();
           // ヒートマップもフィルタ変更・旅行追加削除に追従させる
           this.heatmap.render();
 
