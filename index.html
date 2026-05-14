@@ -241,6 +241,82 @@
       color: var(--color-text-primary);
       word-break: break-word;
     }
+    /* 右パネル詳細のカラータグ（移動手段=青 / 同行者=緑 / タグ=紫） */
+    .detail-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .detail-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      white-space: nowrap;
+      line-height: 1.4;
+    }
+    .detail-tag-transport {
+      background: var(--color-background-info);
+      color: var(--color-text-info);
+    }
+    .detail-tag-companions {
+      background: var(--color-background-success);
+      color: var(--color-text-success);
+    }
+    .detail-tag-tags {
+      background: var(--color-background-tag);
+      color: var(--color-text-tag);
+    }
+    .detail-memo {
+      font-size: 12px;
+      color: var(--color-text-primary);
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.6;
+      padding: 6px 8px;
+      background: var(--color-background-secondary);
+      border-radius: var(--border-radius-md);
+    }
+
+    /* ===== 写真ビューア ===== */
+    .photo-viewer-image {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      background: var(--color-background-photo-placeholder);
+    }
+    .photo-viewer-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(0, 0, 0, 0.5);
+      color: white;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+    .photo-viewer-arrow:hover { background: rgba(0, 0, 0, 0.75); }
+    .photo-viewer-arrow-prev { left: 6px; }
+    .photo-viewer-arrow-next { right: 6px; }
+    .photo-viewer-counter {
+      position: absolute;
+      bottom: 6px;
+      right: 6px;
+      background: rgba(0, 0, 0, 0.55);
+      color: white;
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      pointer-events: none;
+    }
     .detail-footer {
       padding: 8px 12px;
       border-top: 0.5px solid var(--color-border-tertiary);
@@ -717,6 +793,74 @@
     .multiselect-add.active {
       background: var(--color-background-info);
     }
+
+    /* ===== 写真アップロード ===== */
+    .photo-upload {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .photo-upload-area {
+      border: 1px dashed var(--color-border-secondary);
+      border-radius: var(--border-radius-md);
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      background: var(--color-background-secondary);
+      transition: background 0.15s, border-color 0.15s;
+      color: var(--color-text-secondary);
+    }
+    .photo-upload-area:hover { background: var(--color-background-info); }
+    .photo-upload-area.dragging {
+      background: var(--color-background-info);
+      border-color: var(--color-border-info);
+      color: var(--color-text-info);
+    }
+    .photo-upload-input { display: none; }
+    .photo-upload-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+      gap: 4px;
+    }
+    .photo-upload-list:empty { display: none; }
+    .photo-upload-item {
+      position: relative;
+      aspect-ratio: 1;
+      overflow: hidden;
+      border-radius: var(--border-radius-md);
+      background: var(--color-background-secondary);
+    }
+    .photo-upload-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .photo-upload-item-remove {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(0, 0, 0, 0.55);
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      line-height: 1;
+      padding: 0;
+    }
+    .photo-upload-item-remove:hover { background: var(--color-text-error); }
+    .photo-upload-progress {
+      font-size: 11px;
+      color: var(--color-text-secondary);
+      text-align: center;
+    }
+    .photo-upload-progress[hidden] { display: none; }
   </style>
 </head>
 <body>
@@ -766,7 +910,7 @@
 
     <!-- 右パネル：旅行詳細 -->
     <aside class="right" aria-label="旅行詳細">
-      <div class="photo-viewer">
+      <div class="photo-viewer" id="photo-viewer">
         <i class="ti ti-photo" style="font-size:36px; opacity:0.4" aria-hidden="true"></i>
       </div>
       <div class="detail-body" id="detail-body">
@@ -841,6 +985,19 @@
           <label class="modal-label" for="trip-memo">メモ</label>
           <textarea id="trip-memo" rows="3" placeholder="旅の自由メモ" maxlength="2000"></textarea>
         </div>
+        <div class="modal-field">
+          <label class="modal-label">写真</label>
+          <div class="photo-upload">
+            <div class="photo-upload-area" id="photo-upload-area">
+              <i class="ti ti-photo-plus" style="font-size:18px" aria-hidden="true"></i>
+              <div>クリックまたはドラッグ&amp;ドロップで写真を追加</div>
+              <div style="font-size:11px;margin-top:4px;">最大 10 枚、長辺 1600px に自動リサイズされます</div>
+            </div>
+            <input type="file" id="photo-upload-input" class="photo-upload-input" accept="image/*" multiple />
+            <div class="photo-upload-list" id="photo-upload-list"></div>
+            <div class="photo-upload-progress" id="photo-upload-progress" hidden></div>
+          </div>
+        </div>
         <div class="form-error" id="form-error" hidden></div>
       </div>
       <div class="modal-footer">
@@ -887,18 +1044,20 @@
           this.storage.load();
           await this.photoDB.init();
           this.bindEvents();
+          this.photoViewer.bindEvents();
           this.mapInit();
           this.renderTripList();
         },
 
         cacheElements() {
           const ids = [
-            'add-btn', 'trip-list', 'pin-count-value', 'detail-body',
+            'add-btn', 'trip-list', 'pin-count-value', 'detail-body', 'photo-viewer',
             'modal-backdrop', 'modal-close-btn', 'modal-cancel-btn', 'modal-save-btn',
             'trip-name', 'trip-start', 'trip-end',
             'trip-accommodation', 'trip-memo',
             'place-search', 'search-results', 'place-list', 'map-pick-btn',
             'pick-mode-banner', 'form-error',
+            'photo-upload-area', 'photo-upload-input', 'photo-upload-list', 'photo-upload-progress',
           ];
           ids.forEach(id => { this.el[id] = document.getElementById(id); });
         },
@@ -1091,6 +1250,8 @@
           this.renderPlaceList();
           this.renderDraftPins();
           this.multiSelect.resetAndRenderAll();
+          this.photoUpload.resetAndRender();
+          this.photoUpload.bindEvents();
           this.el['modal-backdrop'].hidden = false;
           this.el['trip-name'].focus();
         },
@@ -1100,9 +1261,10 @@
           this.el['modal-backdrop'].hidden = true;
           this.state.draft = null;
           this.renderDraftPins();
+          this.photoUpload.resetAndRender(); // pending を解放
         },
 
-        modalSave() {
+        async modalSave() {
           const draft = this.state.draft;
           if (!draft) return;
           draft.name = this.el['trip-name'].value.trim();
@@ -1119,10 +1281,17 @@
             return;
           }
 
-          this.state.trips.push(draft);
-          this.storage.save();
-          this.renderTripList();
-          this.modalClose();
+          // 保存中は二重クリック防止のため save ボタンを無効化
+          this.el['modal-save-btn'].disabled = true;
+          try {
+            draft.photos = await this.photoUpload.commitToDraft();
+            this.state.trips.push(draft);
+            this.storage.save();
+            this.renderTripList();
+            this.modalClose();
+          } finally {
+            this.el['modal-save-btn'].disabled = false;
+          }
         },
 
         validateDraft(draft) {
@@ -1152,12 +1321,13 @@
         },
 
         // ===== Trip Selection =====
-        // 同じ ID をもう一度クリックで解除（toggle）。pin / 右パネルは Task #3/#5 で連動
+        // 同じ ID をもう一度クリックで解除（toggle）
         selectTrip(tripId) {
           this.state.selectedTripId = (this.state.selectedTripId === tripId) ? null : tripId;
           this.renderTripList();
           this.renderSelectedTripPins();
           this.renderTripDetail();
+          this.photoViewer.load(this.getSelectedTrip());
         },
 
         getSelectedTrip() {
@@ -1608,6 +1778,224 @@
           },
         },
 
+        // ===== 写真アップロード（モーダル内）=====
+        // ファイル選択 → リサイズ（1600px / JPEG 0.80）→ プレビュー
+        // 保存時に IDB へ書き込み、draft.photos は { id } 参照のみ
+        photoUpload: {
+          MAX_LONG_EDGE: 1600,
+          JPEG_QUALITY: 0.80,
+          MAX_PHOTOS_PER_UPLOAD: 10,
+
+          // 編集中の写真候補 [{ id, dataURL }]。modalSave で IDB に書く
+          _pending: [],
+          _eventsBound: false,
+
+          resetAndRender() {
+            this._pending = [];
+            this.render();
+          },
+
+          render() {
+            const list = App.el['photo-upload-list'];
+            if (!list) return;
+            list.innerHTML = this._pending.map(p => `
+              <div class="photo-upload-item">
+                <img src="${p.dataURL}" alt="" />
+                <button class="photo-upload-item-remove" type="button" data-id="${App.escape(p.id)}" aria-label="削除">×</button>
+              </div>
+            `).join('');
+          },
+
+          // createImageBitmap + Canvas でリサイズ。EXIF orientation は imageOrientation: 'from-image' で反映
+          async resizeImage(file) {
+            const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+            let width = bitmap.width;
+            let height = bitmap.height;
+            if (Math.max(width, height) > this.MAX_LONG_EDGE) {
+              const scale = this.MAX_LONG_EDGE / Math.max(width, height);
+              width = Math.round(width * scale);
+              height = Math.round(height * scale);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+            bitmap.close();
+            return canvas.toDataURL('image/jpeg', this.JPEG_QUALITY);
+          },
+
+          async addFiles(fileList) {
+            const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+            if (files.length === 0) return;
+            if (this._pending.length + files.length > this.MAX_PHOTOS_PER_UPLOAD) {
+              alert(`写真は最大 ${this.MAX_PHOTOS_PER_UPLOAD} 枚までです\n（現在: ${this._pending.length} 枚、追加しようとした枚数: ${files.length} 枚）`);
+              return;
+            }
+            const progress = App.el['photo-upload-progress'];
+            let completed = 0;
+            progress.hidden = false;
+            for (const file of files) {
+              progress.textContent = `処理中... ${++completed}/${files.length}`;
+              try {
+                const dataURL = await this.resizeImage(file);
+                this._pending.push({ id: crypto.randomUUID(), dataURL });
+                this.render();
+              } catch (err) {
+                console.error('写真処理に失敗:', file.name, err);
+              }
+            }
+            progress.hidden = true;
+          },
+
+          removePending(id) {
+            this._pending = this._pending.filter(p => p.id !== id);
+            this.render();
+          },
+
+          // modalSave 時に呼ばれる。pending を IDB に書き、draft.photos に入れる [{ id }] を返す
+          async commitToDraft() {
+            const refs = [];
+            const now = Date.now();
+            for (const p of this._pending) {
+              try {
+                await App.photoDB.put({ id: p.id, dataURL: p.dataURL, createdAt: now });
+                refs.push({ id: p.id });
+              } catch (err) {
+                console.error('写真の IDB 保存に失敗:', err);
+              }
+            }
+            return refs;
+          },
+
+          bindEvents() {
+            if (this._eventsBound) return;
+            this._eventsBound = true;
+            const area = App.el['photo-upload-area'];
+            const input = App.el['photo-upload-input'];
+            const list = App.el['photo-upload-list'];
+            if (!area || !input || !list) return;
+
+            area.addEventListener('click', () => input.click());
+            input.addEventListener('change', (e) => {
+              this.addFiles(e.target.files);
+              input.value = ''; // 同一ファイル再選択を許可
+            });
+
+            area.addEventListener('dragover', (e) => {
+              e.preventDefault();
+              area.classList.add('dragging');
+            });
+            area.addEventListener('dragleave', () => area.classList.remove('dragging'));
+            area.addEventListener('drop', (e) => {
+              e.preventDefault();
+              area.classList.remove('dragging');
+              if (e.dataTransfer?.files) this.addFiles(e.dataTransfer.files);
+            });
+
+            list.addEventListener('click', (e) => {
+              const btn = e.target.closest('.photo-upload-item-remove');
+              if (!btn) return;
+              this.removePending(btn.dataset.id);
+            });
+          },
+        },
+
+        // ===== 写真ビューア（右パネル上部）=====
+        // 選択中の旅行の写真を 1 枚ずつ表示。矢印 / キーボードで切替
+        photoViewer: {
+          _photos: [],    // [{ id, dataURL, createdAt }]
+          _index: 0,
+          _loading: false,
+          _eventsBound: false,
+
+          async load(trip) {
+            if (!trip || !trip.photos || trip.photos.length === 0) {
+              this._photos = [];
+              this._index = 0;
+              this.render();
+              return;
+            }
+            this._loading = true;
+            this.render();
+            try {
+              const ids = trip.photos.map(p => p.id);
+              const photos = await App.photoDB.getMany(ids);
+              this._photos = photos.filter(p => p !== null);
+              this._index = 0;
+            } catch (err) {
+              console.error('写真の読み込みに失敗', err);
+              this._photos = [];
+            } finally {
+              this._loading = false;
+              this.render();
+            }
+          },
+
+          clear() {
+            this._photos = [];
+            this._index = 0;
+            this.render();
+          },
+
+          render() {
+            const container = App.el['photo-viewer'];
+            if (!container) return;
+            if (this._loading) {
+              container.innerHTML = `<div style="font-size:11px;color:var(--color-text-secondary)">読み込み中…</div>`;
+              return;
+            }
+            if (this._photos.length === 0) {
+              container.innerHTML = `<i class="ti ti-photo" style="font-size:36px; opacity:0.4" aria-hidden="true"></i>`;
+              return;
+            }
+            const current = this._photos[this._index];
+            const total = this._photos.length;
+            container.innerHTML = `
+              <img class="photo-viewer-image" src="${App.escape(current.dataURL)}" alt="" />
+              ${total > 1 ? `
+                <button class="photo-viewer-arrow photo-viewer-arrow-prev" type="button" aria-label="前の写真">‹</button>
+                <button class="photo-viewer-arrow photo-viewer-arrow-next" type="button" aria-label="次の写真">›</button>
+                <div class="photo-viewer-counter">${this._index + 1} / ${total}</div>
+              ` : ''}
+            `;
+          },
+
+          prev() {
+            if (this._photos.length === 0) return;
+            this._index = (this._index - 1 + this._photos.length) % this._photos.length;
+            this.render();
+          },
+
+          next() {
+            if (this._photos.length === 0) return;
+            this._index = (this._index + 1) % this._photos.length;
+            this.render();
+          },
+
+          bindEvents() {
+            if (this._eventsBound) return;
+            this._eventsBound = true;
+            const viewer = App.el['photo-viewer'];
+            if (!viewer) return;
+
+            viewer.addEventListener('click', (e) => {
+              if (e.target.closest('.photo-viewer-arrow-prev')) this.prev();
+              else if (e.target.closest('.photo-viewer-arrow-next')) this.next();
+            });
+
+            // 矢印キーで切替（input/textarea にフォーカスがあるときは無視）
+            document.addEventListener('keydown', (e) => {
+              if (this._photos.length <= 1) return;
+              const a = document.activeElement;
+              if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) return;
+              // モーダルが開いているときは無効化
+              if (!App.el['modal-backdrop'].hidden) return;
+              if (e.key === 'ArrowLeft') { e.preventDefault(); this.prev(); }
+              else if (e.key === 'ArrowRight') { e.preventDefault(); this.next(); }
+            });
+          },
+        },
+
         // ===== Rendering =====
         renderTripList() {
           const container = this.el['trip-list'];
@@ -1653,7 +2041,7 @@
           }).join('');
         },
 
-        // 右パネル詳細：選択中の旅行の情報を描画。Sprint 4 で transport/companions/memo/photos 追加
+        // 右パネル詳細：選択中の旅行の情報を描画。空のセクションは非表示
         renderTripDetail() {
           const container = this.el['detail-body'];
           const trip = this.getSelectedTrip();
@@ -1665,25 +2053,80 @@
             `;
             return;
           }
-          const placeListHtml = trip.places.map(p => `
-            <li class="detail-place-item">
-              <i class="ti ti-map-pin" style="font-size:11px" aria-hidden="true"></i>
-              <span>${this.escape(p.name)}</span>
-            </li>
-          `).join('');
-          container.innerHTML = `
-            <div class="detail-content">
-              <h2 class="detail-title">${this.escape(trip.name)}</h2>
-              <div class="detail-section">
-                <div class="detail-section-label">日程</div>
-                <div class="detail-section-value">
-                  ${this.escape(trip.startDate)} 〜 ${this.escape(trip.endDate)}
-                </div>
-              </div>
+
+          const sections = [];
+
+          sections.push(`
+            <div class="detail-section">
+              <div class="detail-section-label">日程</div>
+              <div class="detail-section-value">${this.escape(trip.startDate)} 〜 ${this.escape(trip.endDate)}</div>
+            </div>
+          `);
+
+          if (trip.places && trip.places.length > 0) {
+            const placeListHtml = trip.places.map(p => `
+              <li class="detail-place-item">
+                <i class="ti ti-map-pin" style="font-size:11px" aria-hidden="true"></i>
+                <span>${this.escape(p.name)}</span>
+              </li>
+            `).join('');
+            sections.push(`
               <div class="detail-section">
                 <div class="detail-section-label">訪問場所（${trip.places.length} か所）</div>
                 <ul class="detail-place-list">${placeListHtml}</ul>
               </div>
+            `);
+          }
+
+          if (trip.transport && trip.transport.length > 0) {
+            sections.push(`
+              <div class="detail-section">
+                <div class="detail-section-label">移動手段</div>
+                <div class="detail-tags">${trip.transport.map(v => `<span class="detail-tag detail-tag-transport">${this.escape(v)}</span>`).join('')}</div>
+              </div>
+            `);
+          }
+
+          if (trip.companions && trip.companions.length > 0) {
+            sections.push(`
+              <div class="detail-section">
+                <div class="detail-section-label">同行者</div>
+                <div class="detail-tags">${trip.companions.map(v => `<span class="detail-tag detail-tag-companions">${this.escape(v)}</span>`).join('')}</div>
+              </div>
+            `);
+          }
+
+          if (trip.accommodation) {
+            sections.push(`
+              <div class="detail-section">
+                <div class="detail-section-label">宿泊所</div>
+                <div class="detail-section-value">${this.escape(trip.accommodation)}</div>
+              </div>
+            `);
+          }
+
+          if (trip.tags && trip.tags.length > 0) {
+            sections.push(`
+              <div class="detail-section">
+                <div class="detail-section-label">タグ</div>
+                <div class="detail-tags">${trip.tags.map(v => `<span class="detail-tag detail-tag-tags">${this.escape(v)}</span>`).join('')}</div>
+              </div>
+            `);
+          }
+
+          if (trip.memo) {
+            sections.push(`
+              <div class="detail-section">
+                <div class="detail-section-label">メモ</div>
+                <div class="detail-memo">${this.escape(trip.memo)}</div>
+              </div>
+            `);
+          }
+
+          container.innerHTML = `
+            <div class="detail-content">
+              <h2 class="detail-title">${this.escape(trip.name)}</h2>
+              ${sections.join('')}
             </div>
           `;
         },
