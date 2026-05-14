@@ -346,6 +346,16 @@
 - [ ] 全タグ（移動手段・同行者・タグ）が色分けして表示
 - [ ] 件数が多いと横スクロール
 
+### レビュー指摘と修正（Sprint 4、2026-05-14）
+
+| 指摘 | 原因 | 修正 |
+|------|------|------|
+| 写真ビューア矢印が `‹/›` グリフでアイコンシステムから外れる | 単純に文字グリフを直書きしていた | Tabler Icons の `ti-chevron-left` / `ti-chevron-right` に置換 |
+| `canvas.getContext('2d')` が null を返した場合 `drawImage` で TypeError | 低メモリ環境で null になる可能性が考慮されていなかった | null チェック → 例外スロー（呼び出し側でユーザーへのフィードバックに繋がる） |
+| `commitToDraft` の IDB put 失敗を握り潰していた | catch で console.error のみ。失敗が呼び出し側に伝わらず「保存成功と見えるが写真が抜ける」事故リスク | 失敗カウンタを保持し、1 枚でも失敗があれば例外スロー。`modalSave` 側で catch して `form-error` に表示 |
+| `multiSelect` ルートクリックで `e.stopPropagation()` 多用、将来のグローバル挙動追加で詰む可能性 | DOM 差し替え後の `e.target` が detached になり `closest()` が機能しないので無効化していた | 外クリック検出を `click` ではなく **`mousedown`** に変更（差し替え前に判定）。stopPropagation を除去 |
+| document レベルのリスナーが `multiSelect.bindEvents` / `photoViewer.bindEvents` 内に分散 | モジュールごとに自前で `document.addEventListener` していた | `App.bindEvents` に集約。各モジュールは `closeAll()` / `handleArrowKey(e)` のような公開メソッドを提供 |
+
 ### 着手前の決定事項（Issue から転記）
 
 #### Issue #2：マルチセレクト UI コンポーネント仕様（2026-05-14 決定済み）
