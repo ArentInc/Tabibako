@@ -26,6 +26,7 @@
       --color-background-info: #e6f1fb;
       --color-background-info-hover: #d9e9f7;
       --color-background-success: #e1f5ee;
+      --color-background-tag: #eeedfe;
       --color-background-photo-placeholder: #c9d9e8;
       --color-background-error: #fef2f2;
 
@@ -33,12 +34,14 @@
       --color-border-tertiary: #e7e5e4;
       --color-border-info: #b5d4f4;
       --color-border-success: #9fe1cb;
+      --color-border-tag: #cecbf6;
       --color-border-error: #fecaca;
 
       --color-text-primary: #1c1917;
       --color-text-secondary: #78716c;
       --color-text-info: #0c447c;
       --color-text-success: #085041;
+      --color-text-tag: #3c3489;
       --color-text-photo-placeholder: #88aabb;
       --color-text-error: #c53030;
 
@@ -312,6 +315,41 @@
       align-items: center;
       gap: 4px;
     }
+    /* 旅行カード：移動手段・同行者・タグの全件横スクロール表示（Issue #2 決定通り） */
+    .trip-card-tags {
+      display: flex;
+      flex-direction: row;
+      gap: 3px;
+      margin-top: 6px;
+      overflow-x: auto;
+      scrollbar-width: thin;
+      padding-bottom: 2px;
+    }
+    .trip-card-tags::-webkit-scrollbar { height: 4px; }
+    .trip-card-tags::-webkit-scrollbar-thumb {
+      background: var(--color-border-tertiary);
+      border-radius: 2px;
+    }
+    .trip-card-tag {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      line-height: 1.4;
+    }
+    .trip-card-tag-transport {
+      background: var(--color-background-info);
+      color: var(--color-text-info);
+    }
+    .trip-card-tag-companions {
+      background: var(--color-background-success);
+      color: var(--color-text-success);
+    }
+    .trip-card-tag-tags {
+      background: var(--color-background-tag);
+      color: var(--color-text-tag);
+    }
 
     /* ===== 地図ピン（Tabler Icon ベース）===== */
     /* L.divIcon の親要素。.leaflet-div-icon の白背景・枠線を打ち消す */
@@ -440,9 +478,22 @@
       color: var(--color-text-primary);
     }
     .modal input[type="text"]:focus,
-    .modal input[type="date"]:focus {
+    .modal input[type="date"]:focus,
+    .modal textarea:focus {
       outline: none;
       border-color: var(--color-border-info);
+    }
+    .modal textarea {
+      font-size: 13px;
+      padding: 6px 10px;
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: var(--border-radius-md);
+      background: var(--color-background-primary);
+      font-family: inherit;
+      width: 100%;
+      color: var(--color-text-primary);
+      resize: vertical;
+      min-height: 64px;
     }
 
     /* 検索結果ドロップダウン */
@@ -526,6 +577,146 @@
       border-radius: var(--border-radius-md);
     }
     .form-error[hidden] { display: none; }
+
+    /* ===== マルチセレクト（Notion 型ドロップダウン）===== */
+    /* 3 プロパティ（transport / companions / tags）で共通使用。data-category で識別 */
+    .multiselect { position: relative; }
+    .multiselect-field {
+      min-height: 32px;
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: var(--border-radius-md);
+      padding: 4px 6px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      cursor: text;
+      background: var(--color-background-primary);
+    }
+    .multiselect-field:focus-within {
+      border-color: var(--color-border-info);
+    }
+    .multiselect-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      font-size: 11px;
+      padding: 2px 2px 2px 8px;
+      border-radius: 20px;
+      border: 0.5px solid var(--color-border-tertiary);
+      background: var(--color-background-secondary);
+      color: var(--color-text-primary);
+      line-height: 1.4;
+    }
+    .multiselect[data-category="transport"] .multiselect-chip {
+      background: var(--color-background-info);
+      color: var(--color-text-info);
+      border-color: var(--color-border-info);
+    }
+    .multiselect[data-category="companions"] .multiselect-chip {
+      background: var(--color-background-success);
+      color: var(--color-text-success);
+      border-color: var(--color-border-success);
+    }
+    .multiselect[data-category="tags"] .multiselect-chip {
+      background: var(--color-background-tag);
+      color: var(--color-text-tag);
+      border-color: var(--color-border-tag);
+    }
+    .multiselect-chip-remove {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      padding: 0 4px;
+      font-size: 14px;
+      line-height: 1;
+      color: inherit;
+      opacity: 0.65;
+      border-radius: 50%;
+    }
+    .multiselect-chip-remove:hover { opacity: 1; }
+    .multiselect-input {
+      flex: 1;
+      min-width: 80px;
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: 12px;
+      padding: 2px 4px;
+      font-family: inherit;
+      color: var(--color-text-primary);
+    }
+    .multiselect-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      margin-top: 2px;
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: var(--border-radius-md);
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 20;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    .multiselect-dropdown[hidden] { display: none; }
+    .multiselect-option {
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--color-text-primary);
+    }
+    .multiselect-option:hover,
+    .multiselect-option.active {
+      background: var(--color-background-secondary);
+    }
+    .multiselect-option-label {
+      flex: 1;
+      word-break: break-word;
+    }
+    .multiselect-option-check {
+      font-size: 11px;
+      color: var(--color-text-info);
+    }
+    /* 値プール削除ボタン。option ホバー時のみ表示 */
+    .multiselect-option-delete {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      color: var(--color-text-secondary);
+      opacity: 0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-right: -4px;
+      flex-shrink: 0;
+    }
+    .multiselect-option:hover .multiselect-option-delete,
+    .multiselect-option.active .multiselect-option-delete {
+      opacity: 0.5;
+    }
+    .multiselect-option-delete:hover {
+      opacity: 1 !important;
+      background: var(--color-background-error);
+      color: var(--color-text-error);
+    }
+    .multiselect-add {
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      border-top: 0.5px solid var(--color-border-tertiary);
+      color: var(--color-text-info);
+      background: var(--color-background-primary);
+    }
+    .multiselect-add:hover,
+    .multiselect-add.active {
+      background: var(--color-background-info);
+    }
   </style>
 </head>
 <body>
@@ -619,7 +810,7 @@
           </div>
         </div>
         <div class="modal-field">
-          <label class="modal-label">訪問場所 <span class="required">*</span></label>
+          <label class="modal-label">訪問場所</label>
           <div class="search-area">
             <input type="text" id="place-search" placeholder="住所・地名で検索（例: 清水寺）" autocomplete="off" />
             <div class="search-result-list" id="search-results" hidden></div>
@@ -629,6 +820,26 @@
             地図から選ぶ
           </button>
           <div class="place-list" id="place-list"></div>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">移動手段</label>
+          <div class="multiselect" data-category="transport"></div>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">同行者</label>
+          <div class="multiselect" data-category="companions"></div>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label" for="trip-accommodation">宿泊所</label>
+          <input type="text" id="trip-accommodation" placeholder="例: ABC ホテル" maxlength="100" />
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">タグ</label>
+          <div class="multiselect" data-category="tags"></div>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label" for="trip-memo">メモ</label>
+          <textarea id="trip-memo" rows="3" placeholder="旅の自由メモ" maxlength="2000"></textarea>
         </div>
         <div class="form-error" id="form-error" hidden></div>
       </div>
@@ -671,9 +882,10 @@
         _throttleChain: Promise.resolve(),
         _searchRequestId: 0,
 
-        init() {
+        async init() {
           this.cacheElements();
           this.storage.load();
+          await this.photoDB.init();
           this.bindEvents();
           this.mapInit();
           this.renderTripList();
@@ -684,6 +896,7 @@
             'add-btn', 'trip-list', 'pin-count-value', 'detail-body',
             'modal-backdrop', 'modal-close-btn', 'modal-cancel-btn', 'modal-save-btn',
             'trip-name', 'trip-start', 'trip-end',
+            'trip-accommodation', 'trip-memo',
             'place-search', 'search-results', 'place-list', 'map-pick-btn',
             'pick-mode-banner', 'form-error',
           ];
@@ -870,11 +1083,14 @@
           this.el['trip-name'].value = '';
           this.el['trip-start'].value = '';
           this.el['trip-end'].value = '';
+          this.el['trip-accommodation'].value = '';
+          this.el['trip-memo'].value = '';
           this.el['place-search'].value = '';
           this.el['form-error'].hidden = true;
           this.renderSearchResults(null);
           this.renderPlaceList();
           this.renderDraftPins();
+          this.multiSelect.resetAndRenderAll();
           this.el['modal-backdrop'].hidden = false;
           this.el['trip-name'].focus();
         },
@@ -892,6 +1108,9 @@
           draft.name = this.el['trip-name'].value.trim();
           draft.startDate = this.el['trip-start'].value;
           draft.endDate = this.el['trip-end'].value;
+          draft.accommodation = this.el['trip-accommodation'].value.trim();
+          draft.memo = this.el['trip-memo'].value.trim();
+          // transport / companions / tags は multiSelect が draft.* に直接書き込み済み
 
           const error = this.validateDraft(draft);
           if (error) {
@@ -911,7 +1130,7 @@
           if (!draft.startDate) return '開始日を入力してください';
           if (!draft.endDate) return '終了日を入力してください';
           if (draft.startDate > draft.endDate) return '終了日は開始日以降にしてください';
-          if (draft.places.length === 0) return '訪問場所を 1 件以上追加してください';
+          // 訪問場所は任意（仕様書では必須だが、Sprint 4 で UX 柔軟性のため任意化）
           return null;
         },
 
@@ -992,6 +1211,403 @@
           },
         },
 
+        // ===== Photo Storage (IndexedDB) =====
+        // 写真本体は localStorage の容量上限 (~5MB) では足りないため IDB に分離。
+        // 旅行データの photos は { id } の参照のみで、本体は photos ストアに格納
+        photoDB: {
+          DB_NAME: 'tabibako',
+          DB_VERSION: 1,
+          STORE: 'photos',
+          _db: null,
+
+          init() {
+            return new Promise((resolve, reject) => {
+              const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+              request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(this.STORE)) {
+                  db.createObjectStore(this.STORE, { keyPath: 'id' });
+                }
+              };
+              request.onsuccess = (e) => {
+                this._db = e.target.result;
+                resolve();
+              };
+              request.onerror = (e) => {
+                console.error('IndexedDB の初期化に失敗', e.target.error);
+                reject(e.target.error);
+              };
+            });
+          },
+
+          // photo: { id, dataURL, createdAt }
+          put(photo) {
+            return new Promise((resolve, reject) => {
+              const tx = this._db.transaction(this.STORE, 'readwrite');
+              const req = tx.objectStore(this.STORE).put(photo);
+              req.onsuccess = () => resolve(photo.id);
+              req.onerror = (e) => reject(e.target.error);
+            });
+          },
+
+          get(id) {
+            return new Promise((resolve, reject) => {
+              const tx = this._db.transaction(this.STORE, 'readonly');
+              const req = tx.objectStore(this.STORE).get(id);
+              req.onsuccess = () => resolve(req.result || null);
+              req.onerror = (e) => reject(e.target.error);
+            });
+          },
+
+          getMany(ids) {
+            return Promise.all(ids.map(id => this.get(id)));
+          },
+
+          delete(id) {
+            return new Promise((resolve, reject) => {
+              const tx = this._db.transaction(this.STORE, 'readwrite');
+              const req = tx.objectStore(this.STORE).delete(id);
+              req.onsuccess = () => resolve();
+              req.onerror = (e) => reject(e.target.error);
+            });
+          },
+        },
+
+        // ===== マルチセレクト UI（Notion 型ドロップダウン）=====
+        // 3 プロパティ（transport / companions / tags）で UI を共有、値プールは独立
+        multiSelect: {
+          POOL_KEYS: {
+            transport: 'tabibako_transport_pool',
+            companions: 'tabibako_companions_pool',
+            tags: 'tabibako_tags_pool',
+          },
+          POOL_DEFAULTS: {
+            transport: ['徒歩', '自転車', '車', '電車', 'バス', '飛行機', '船'],
+            companions: [],
+            tags: [],
+          },
+          CATEGORIES: ['transport', 'companions', 'tags'],
+          PLACEHOLDERS: {
+            transport: '移動手段を追加',
+            companions: '同行者を追加',
+            tags: 'タグを追加',
+          },
+
+          // category → { open, query, activeIndex }
+          _ui: {},
+          _eventsBound: false,
+
+          getPool(category) {
+            try {
+              const raw = localStorage.getItem(this.POOL_KEYS[category]);
+              if (raw) return JSON.parse(raw);
+            } catch (err) {
+              console.error('値プール読み込み失敗', err);
+            }
+            return [...this.POOL_DEFAULTS[category]];
+          },
+
+          savePool(category, pool) {
+            try {
+              localStorage.setItem(this.POOL_KEYS[category], JSON.stringify(pool));
+            } catch (err) {
+              console.error('値プール保存失敗', err);
+            }
+          },
+
+          // draft 上の選択中の値
+          getSelected(category) {
+            return App.state.draft?.[category] || [];
+          },
+
+          setSelected(category, values) {
+            if (App.state.draft) App.state.draft[category] = values;
+          },
+
+          // 全カテゴリの UI 状態リセットと再描画。モーダル開閉時に呼ぶ
+          resetAndRenderAll() {
+            this.CATEGORIES.forEach(cat => {
+              this._ui[cat] = { open: false, query: '', activeIndex: -1 };
+              this.render(cat);
+            });
+            if (!this._eventsBound) {
+              this.bindEvents();
+              this._eventsBound = true;
+            }
+          },
+
+          // 候補リスト（プール - 選択済み）を query でフィルター
+          filteredOptions(category) {
+            const pool = this.getPool(category);
+            const selected = this.getSelected(category);
+            const q = (this._ui[category]?.query || '').trim().toLowerCase();
+            const remaining = pool.filter(v => !selected.includes(v));
+            if (!q) return remaining;
+            return remaining.filter(v => v.toLowerCase().includes(q));
+          },
+
+          // 「+ "xxx" を新規追加」が表示されるかの判定
+          canAddNew(category) {
+            const q = (this._ui[category]?.query || '').trim();
+            if (!q) return false;
+            const pool = this.getPool(category);
+            const selected = this.getSelected(category);
+            // プールにも選択済みにも一致しないときのみ
+            return !pool.includes(q) && !selected.includes(q);
+          },
+
+          render(category) {
+            const root = document.querySelector(`.multiselect[data-category="${category}"]`);
+            if (!root) return;
+            const ui = this._ui[category] || { open: false, query: '', activeIndex: -1 };
+            const selected = this.getSelected(category);
+
+            const chips = selected.map(v => `
+              <span class="multiselect-chip">${App.escape(v)}<button class="multiselect-chip-remove" type="button" data-value="${App.escape(v)}" aria-label="削除">×</button></span>
+            `).join('');
+
+            const inputHtml = `
+              <input class="multiselect-input" type="text" autocomplete="off"
+                     placeholder="${App.escape(this.PLACEHOLDERS[category])}" value="${App.escape(ui.query)}" />
+            `;
+
+            let dropdownHtml = '';
+            if (ui.open) {
+              const options = this.filteredOptions(category);
+              const optionsHtml = options.map((v, i) => `
+                <div class="multiselect-option${i === ui.activeIndex ? ' active' : ''}" data-value="${App.escape(v)}" data-index="${i}">
+                  <span class="multiselect-option-label">${App.escape(v)}</span>
+                  <button class="multiselect-option-delete" type="button" data-pool-value="${App.escape(v)}" aria-label="候補から削除" title="候補から削除">×</button>
+                </div>
+              `).join('');
+              const addNewIndex = options.length;
+              const addNewHtml = this.canAddNew(category) ? `
+                <div class="multiselect-add${addNewIndex === ui.activeIndex ? ' active' : ''}" data-index="${addNewIndex}">+ "${App.escape(ui.query.trim())}" を新規追加</div>
+              ` : '';
+              const emptyHtml = (options.length === 0 && !this.canAddNew(category)) ? `
+                <div class="multiselect-option" style="cursor:default;color:var(--color-text-secondary)">候補がありません</div>
+              ` : '';
+              dropdownHtml = `<div class="multiselect-dropdown">${optionsHtml}${addNewHtml || emptyHtml}</div>`;
+            } else {
+              dropdownHtml = `<div class="multiselect-dropdown" hidden></div>`;
+            }
+
+            root.innerHTML = `
+              <div class="multiselect-field">${chips}${inputHtml}</div>
+              ${dropdownHtml}
+            `;
+
+            // 描画後にフォーカス復元（dropdown を開いた直後など）
+            if (ui.open) {
+              const input = root.querySelector('.multiselect-input');
+              if (input && document.activeElement !== input) {
+                input.focus();
+                // カーソルを末尾に
+                const len = input.value.length;
+                input.setSelectionRange(len, len);
+              }
+            }
+          },
+
+          open(category) {
+            const ui = this._ui[category] || {};
+            ui.open = true;
+            ui.activeIndex = -1;
+            this._ui[category] = ui;
+            this.render(category);
+          },
+
+          close(category) {
+            if (this._ui[category]) {
+              this._ui[category].open = false;
+              this._ui[category].query = '';
+              this._ui[category].activeIndex = -1;
+            }
+            this.render(category);
+          },
+
+          // 値の選択/解除トグル
+          toggleValue(category, value) {
+            const selected = this.getSelected(category);
+            const idx = selected.indexOf(value);
+            if (idx >= 0) selected.splice(idx, 1);
+            else selected.push(value);
+            this.setSelected(category, [...selected]);
+            // 選択後も dropdown は開いたまま、検索クエリはリセット
+            if (this._ui[category]) this._ui[category].query = '';
+            this.render(category);
+          },
+
+          addNewAndSelect(category, value) {
+            const trimmed = value.trim();
+            if (!trimmed) return;
+            const pool = this.getPool(category);
+            if (!pool.includes(trimmed)) {
+              pool.push(trimmed);
+              this.savePool(category, pool);
+            }
+            const selected = this.getSelected(category);
+            if (!selected.includes(trimmed)) {
+              selected.push(trimmed);
+              this.setSelected(category, [...selected]);
+            }
+            if (this._ui[category]) {
+              this._ui[category].query = '';
+              this._ui[category].activeIndex = -1;
+            }
+            this.render(category);
+          },
+
+          // チップ × での削除（選択中の draft から外す）
+          removeValue(category, value) {
+            const selected = this.getSelected(category).filter(v => v !== value);
+            this.setSelected(category, selected);
+            this.render(category);
+          },
+
+          // 候補ホバー時の × で「値プール」から完全削除（過去の選択値を整理）
+          // 保存済みの旅行データには影響しない（仕様書「将来対応」の前倒し実装）
+          deleteFromPool(category, value) {
+            const pool = this.getPool(category).filter(v => v !== value);
+            this.savePool(category, pool);
+            // 現在 draft で選択中なら外す
+            const selected = this.getSelected(category).filter(v => v !== value);
+            this.setSelected(category, selected);
+            this.render(category);
+          },
+
+          // ↑↓ で activeIndex 移動
+          moveActive(category, delta) {
+            const ui = this._ui[category];
+            if (!ui || !ui.open) return;
+            const optionsCount = this.filteredOptions(category).length;
+            const total = optionsCount + (this.canAddNew(category) ? 1 : 0);
+            if (total === 0) return;
+            let next = ui.activeIndex + delta;
+            if (next < 0) next = total - 1;
+            if (next >= total) next = 0;
+            ui.activeIndex = next;
+            this.render(category);
+          },
+
+          // Enter で active な候補を選択（または add）
+          confirmActive(category) {
+            const ui = this._ui[category];
+            if (!ui || !ui.open) return;
+            const options = this.filteredOptions(category);
+            const optionsCount = options.length;
+            const addAvailable = this.canAddNew(category);
+
+            if (ui.activeIndex < 0) {
+              // active 候補なし。query が新規値として追加可能ならそれを採用
+              if (addAvailable) {
+                this.addNewAndSelect(category, ui.query.trim());
+              }
+              return;
+            }
+            if (ui.activeIndex < optionsCount) {
+              this.toggleValue(category, options[ui.activeIndex]);
+              return;
+            }
+            if (ui.activeIndex === optionsCount && addAvailable) {
+              this.addNewAndSelect(category, ui.query.trim());
+            }
+          },
+
+          // 共通イベントバインド（初回のみ）
+          bindEvents() {
+            this.CATEGORIES.forEach(cat => {
+              const root = document.querySelector(`.multiselect[data-category="${cat}"]`);
+              if (!root) return;
+
+              // クリック処理を 1 ハンドラに統合し、必ず stopPropagation で document まで伝播させない。
+              // 伝播させると、render() で DOM が差し替わった後の e.target が detached になり、
+              // 後段の「外クリックで閉じる」ハンドラが closest() で null を返して誤って close() を呼ぶ
+              root.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const removeBtn = e.target.closest('.multiselect-chip-remove');
+                if (removeBtn) {
+                  this.removeValue(cat, removeBtn.dataset.value);
+                  return;
+                }
+                // 候補の × は「値プールから削除」（option click より先に判定）
+                const poolDeleteBtn = e.target.closest('.multiselect-option-delete');
+                if (poolDeleteBtn) {
+                  const value = poolDeleteBtn.dataset.poolValue;
+                  if (confirm(`候補から「${value}」を削除しますか？\n（保存済みの旅行データはそのまま残ります）`)) {
+                    this.deleteFromPool(cat, value);
+                  }
+                  return;
+                }
+                const opt = e.target.closest('.multiselect-option');
+                if (opt && opt.dataset.value) {
+                  this.toggleValue(cat, opt.dataset.value);
+                  return;
+                }
+                const add = e.target.closest('.multiselect-add');
+                if (add) {
+                  const q = (this._ui[cat]?.query || '').trim();
+                  if (q) this.addNewAndSelect(cat, q);
+                  return;
+                }
+                if (e.target.closest('.multiselect-field')) {
+                  this.open(cat);
+                }
+              });
+
+              // 入力イベント。IME 確定前（e.isComposing）は再描画しない。
+              // 再描画すると input 要素ごと差し替わって IME の composition 状態が失われ、
+              // 「sa」と打って「さ」に変換されるはずが「sあ」のような壊れた表示になる
+              root.addEventListener('input', (e) => {
+                if (!e.target.matches('.multiselect-input')) return;
+                if (e.isComposing) return;
+                const ui = this._ui[cat];
+                if (!ui) return;
+                ui.query = e.target.value;
+                ui.activeIndex = -1;
+                ui.open = true;
+                this.render(cat);
+              });
+
+              // IME 確定完了後、最終的な確定値で再描画
+              root.addEventListener('compositionend', (e) => {
+                if (!e.target.matches('.multiselect-input')) return;
+                const ui = this._ui[cat];
+                if (!ui) return;
+                ui.query = e.target.value;
+                ui.activeIndex = -1;
+                ui.open = true;
+                this.render(cat);
+              });
+
+              root.addEventListener('keydown', (e) => {
+                if (!e.target.matches('.multiselect-input')) return;
+                // IME 変換中の Enter / Escape / ArrowDown は IME 側に渡す
+                if (e.isComposing) return;
+                if (e.key === 'ArrowDown') { e.preventDefault(); this.moveActive(cat, 1); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); this.moveActive(cat, -1); }
+                else if (e.key === 'Enter') { e.preventDefault(); this.confirmActive(cat); }
+                else if (e.key === 'Escape') { e.preventDefault(); this.close(cat); }
+                else if (e.key === 'Backspace' && e.target.value === '') {
+                  const selected = this.getSelected(cat);
+                  if (selected.length > 0) {
+                    e.preventDefault();
+                    this.removeValue(cat, selected[selected.length - 1]);
+                  }
+                }
+              });
+            });
+
+            // 外クリックで開いている multiselect をすべて閉じる
+            // （multiselect 内のクリックは上の stopPropagation でここに来ない）
+            document.addEventListener('click', () => {
+              this.CATEGORIES.forEach(cat => {
+                if (this._ui[cat]?.open) this.close(cat);
+              });
+            });
+          },
+        },
+
         // ===== Rendering =====
         renderTripList() {
           const container = this.el['trip-list'];
@@ -1008,6 +1624,15 @@
           const selectedId = this.state.selectedTripId;
           container.innerHTML = trips.map(trip => {
             const isSelected = trip.id === selectedId;
+            const allTags = [
+              ...(trip.transport || []).map(v => ({ value: v, kind: 'transport' })),
+              ...(trip.companions || []).map(v => ({ value: v, kind: 'companions' })),
+              ...(trip.tags || []).map(v => ({ value: v, kind: 'tags' })),
+            ];
+            const tagsHtml = allTags.length > 0 ? `
+              <div class="trip-card-tags">
+                ${allTags.map(t => `<span class="trip-card-tag trip-card-tag-${t.kind}">${this.escape(t.value)}</span>`).join('')}
+              </div>` : '';
             return `
             <div class="trip-card${isSelected ? ' selected' : ''}" data-trip-id="${this.escape(trip.id)}"
                  role="button" tabindex="0" aria-pressed="${isSelected ? 'true' : 'false'}">
@@ -1022,6 +1647,7 @@
                   <span>訪問場所 ${trip.places.length} か所</span>
                 </div>
               </div>
+              ${tagsHtml}
             </div>
           `;
           }).join('');
