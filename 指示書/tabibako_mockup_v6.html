@@ -1,0 +1,239 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+.app{display:grid;grid-template-columns:256px 1fr 260px;height:580px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-lg);overflow:hidden;font-size:13px}
+
+.left{background:var(--color-background-primary);border-right:0.5px solid var(--color-border-tertiary);display:flex;flex-direction:column;overflow:hidden}
+.left-toolbar{padding:8px 10px;border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;gap:6px;flex-shrink:0;position:relative}
+.left-toolbar-title{font-size:13px;font-weight:500;color:var(--color-text-primary);flex:1}
+.icon-btn{width:26px;height:26px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);display:flex;align-items:center;justify-content:center;cursor:pointer;background:transparent;color:var(--color-text-secondary);flex-shrink:0}
+.icon-btn.active{background:var(--color-background-info);border-color:var(--color-border-info);color:var(--color-text-info)}
+.sort-dropdown{position:absolute;top:38px;right:36px;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);box-shadow:0 4px 16px rgba(0,0,0,0.10);z-index:200;min-width:160px;overflow:hidden;display:none}
+.sort-option{padding:8px 12px;font-size:12px;color:var(--color-text-primary);cursor:pointer;display:flex;align-items:center;gap:8px}
+.sort-option:hover{background:var(--color-background-secondary)}
+.sort-option.selected{color:var(--color-text-info)}
+.sort-check{width:14px;font-size:12px;color:var(--color-text-info)}
+.sort-divider-line{height:0.5px;background:var(--color-border-tertiary)}
+
+.filter-section{flex-shrink:0;border-bottom:0.5px solid var(--color-border-tertiary)}
+.filter-group{padding:5px 10px}
+.filter-group-label{font-size:10px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px}
+.filter-tags{display:flex;flex-wrap:wrap;gap:3px}
+.ftag{font-size:11px;padding:2px 7px;border-radius:20px;border:0.5px solid var(--color-border-secondary);color:var(--color-text-secondary);cursor:pointer;background:transparent}
+.ftag.on-blue{background:#E6F1FB;color:#0C447C;border-color:#B5D4F4}
+.ftag.on-teal{background:#E1F5EE;color:#085041;border-color:#9FE1CB}
+.ftag.on-purple{background:#EEEDFE;color:#3C3489;border-color:#CECBF6}
+.filter-divider{height:0.5px;background:var(--color-border-tertiary);margin:0 10px}
+
+.trip-list{flex:1;overflow-y:auto;padding:6px}
+.trip-card{padding:9px 10px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary);margin-bottom:5px;cursor:pointer;background:var(--color-background-primary)}
+.trip-card.selected{border:1.5px solid var(--color-border-info);background:var(--color-background-info)}
+.trip-card.selected .trip-name{color:var(--color-text-info)}
+.trip-name{font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px}
+.trip-date{font-size:11px;color:var(--color-text-secondary);margin-bottom:4px}
+.trip-tags{display:flex;flex-wrap:wrap;gap:3px}
+.ttag{font-size:10px;padding:1px 6px;border-radius:20px;background:var(--color-background-secondary);color:var(--color-text-secondary)}
+
+.center{position:relative;overflow:hidden}
+/* ヒートマップボタン：右上 */
+.map-heatmap-btn{position:absolute;top:10px;right:10px;z-index:100;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:20px;padding:5px 12px;font-size:12px;color:var(--color-text-secondary);cursor:pointer;display:flex;align-items:center;gap:5px;box-shadow:0 2px 8px rgba(0,0,0,0.10);white-space:nowrap}
+/* ピン数：左上 */
+.map-pin-count{position:absolute;top:10px;left:10px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:4px 8px;font-size:11px;color:var(--color-text-secondary);z-index:90}
+.zoom-ctrl{position:absolute;bottom:12px;right:8px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);overflow:hidden;z-index:90}
+.zoom-btn{display:block;width:28px;height:24px;text-align:center;line-height:24px;font-size:14px;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);cursor:pointer}
+.zoom-btn:last-child{border-bottom:none}
+.pin{position:absolute;width:10px;height:10px;border-radius:50%;border:2px solid #fff;transform:translate(-50%,-50%);background:#378ADD}
+.pin-popup{position:absolute;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:3px 7px;font-size:11px;color:var(--color-text-primary);white-space:nowrap;transform:translate(-50%,-115%);z-index:95}
+.map-label{position:absolute;font-size:10px;color:#666;font-weight:500}
+.autozoom-badge{position:absolute;bottom:12px;left:10px;background:var(--color-background-success);border:0.5px solid var(--color-border-success);border-radius:var(--border-radius-md);padding:4px 8px;font-size:11px;color:var(--color-text-success);z-index:90;display:flex;align-items:center;gap:4px}
+
+.right{background:var(--color-background-primary);border-left:0.5px solid var(--color-border-tertiary);display:flex;flex-direction:column;overflow:hidden}
+.photo-viewer{height:140px;flex-shrink:0;border-bottom:0.5px solid var(--color-border-tertiary);position:relative;display:flex;align-items:center;justify-content:center;background:#c9d9e8}
+.photo-arrow{position:absolute;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--color-text-secondary)}
+.photo-arrow-l{left:6px}
+.photo-arrow-r{right:6px}
+.photo-counter{position:absolute;bottom:6px;right:8px;font-size:10px;background:rgba(0,0,0,0.4);color:#fff;padding:2px 6px;border-radius:20px}
+.detail-body{flex:1;overflow-y:auto;padding:12px}
+.detail-title{font-size:15px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px}
+.detail-date{font-size:12px;color:var(--color-text-secondary);margin-bottom:12px}
+.prop-row{display:flex;gap:8px;margin-bottom:8px;align-items:flex-start}
+.prop-key{font-size:11px;color:var(--color-text-secondary);width:64px;flex-shrink:0;padding-top:2px}
+.prop-tags{display:flex;flex-wrap:wrap;gap:3px}
+.ptag{font-size:10px;padding:2px 7px;border-radius:20px;background:var(--color-background-secondary);color:var(--color-text-secondary)}
+.ptag-blue{background:#E6F1FB;color:#0C447C}
+.ptag-teal{background:#E1F5EE;color:#085041}
+.ptag-purple{background:#EEEDFE;color:#3C3489}
+.memo-box{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:8px;font-size:12px;color:var(--color-text-secondary);line-height:1.6}
+.detail-footer{padding:8px 12px;border-top:0.5px solid var(--color-border-tertiary);display:flex;gap:6px;flex-shrink:0}
+.btn-sm{font-size:11px;padding:4px 10px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-primary);cursor:pointer}
+</style>
+
+<h2 class="sr-only">Tabibako v6モック。ヒートマップボタンが地図右上に移動し、左上のピン数表示と重ならない。</h2>
+
+<div style="padding:1rem 0">
+<div class="app">
+
+  <div class="left">
+    <div class="left-toolbar">
+      <span class="left-toolbar-title">Tabibako</span>
+      <div class="icon-btn active" id="sort-btn" onclick="toggleSort()" title="ソート" aria-label="ソート">
+        <i class="ti ti-arrows-sort" style="font-size:14px" aria-hidden="true"></i>
+      </div>
+      <div class="icon-btn" title="旅行を追加" aria-label="旅行を追加">
+        <i class="ti ti-plus" style="font-size:14px" aria-hidden="true"></i>
+      </div>
+      <div class="sort-dropdown" id="sort-dropdown">
+        <div class="sort-option selected" onclick="selectSort(this)"><span class="sort-check">✓</span>日程（新しい順）</div>
+        <div class="sort-option" onclick="selectSort(this)"><span class="sort-check"> </span>日程（古い順）</div>
+        <div class="sort-divider-line"></div>
+        <div class="sort-option" onclick="selectSort(this)"><span class="sort-check"> </span>旅行名（あいうえお順）</div>
+      </div>
+    </div>
+
+    <div class="filter-section">
+      <div class="filter-group" style="padding-top:7px">
+        <div class="filter-group-label">移動手段</div>
+        <div class="filter-tags">
+          <span class="ftag on-blue">自転車</span><span class="ftag">電車</span><span class="ftag">徒歩</span><span class="ftag">車</span>
+        </div>
+      </div>
+      <div class="filter-divider" style="margin-top:6px"></div>
+      <div class="filter-group" style="padding-top:6px">
+        <div class="filter-group-label">同行者</div>
+        <div class="filter-tags">
+          <span class="ftag">一人</span><span class="ftag">家族</span><span class="ftag on-teal">田中さん</span><span class="ftag">友人A</span>
+        </div>
+      </div>
+      <div class="filter-divider" style="margin-top:6px"></div>
+      <div class="filter-group" style="padding-top:6px;padding-bottom:7px">
+        <div class="filter-group-label">タグ</div>
+        <div class="filter-tags">
+          <span class="ftag">日帰り</span><span class="ftag">ビワイチ</span><span class="ftag on-purple">近代建築</span><span class="ftag">青春18</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="trip-list" onclick="closeSort()">
+      <div class="trip-card selected">
+        <div class="trip-name">琵琶湖一周サイクリング</div>
+        <div class="trip-date">2024/09/14 〜 09/15 · 滋賀県</div>
+        <div class="trip-tags"><span class="ttag">自転車</span><span class="ttag">一人</span><span class="ttag">ビワイチ</span></div>
+      </div>
+      <div class="trip-card">
+        <div class="trip-name">しまなみ海道ライド</div>
+        <div class="trip-date">2024/05/03 〜 05/04 · 広島・愛媛</div>
+        <div class="trip-tags"><span class="ttag">自転車</span><span class="ttag">田中さん</span></div>
+      </div>
+      <div class="trip-card">
+        <div class="trip-name">北陸旅行</div>
+        <div class="trip-date">2023/11/22 〜 11/24 · 石川・富山</div>
+        <div class="trip-tags"><span class="ttag">電車</span><span class="ttag">家族</span></div>
+      </div>
+      <div class="trip-card">
+        <div class="trip-name">東京近代建築散歩</div>
+        <div class="trip-date">2023/08/11 · 東京都</div>
+        <div class="trip-tags"><span class="ttag">徒歩</span><span class="ttag">一人</span><span class="ttag">近代建築</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="center" onclick="closeSort()">
+    <div style="position:absolute;inset:0;background:linear-gradient(135deg,#dde8d0 0%,#e8e0d0 40%,#d0e0e8 100%);opacity:0.7"></div>
+    <div style="position:absolute;width:2px;height:100%;top:0;left:45%;background:#fff;opacity:0.45"></div>
+    <div style="position:absolute;height:2px;width:100%;top:38%;left:0;background:#fff;opacity:0.45"></div>
+    <div style="position:absolute;height:2px;width:60%;top:62%;left:20%;background:#fff;opacity:0.35;transform:rotate(-6deg)"></div>
+    <div class="map-label" style="top:18%;left:18%">大津市</div>
+    <div class="map-label" style="top:56%;left:54%">草津市</div>
+    <div class="map-label" style="top:32%;left:58%">彦根市</div>
+    <div class="map-label" style="top:72%;left:24%">守山市</div>
+    <div class="pin" style="top:24%;left:30%"></div>
+    <div class="pin-popup" style="top:24%;left:30%">大津港</div>
+    <div class="pin" style="top:40%;left:63%"></div>
+    <div class="pin" style="top:63%;left:69%"></div>
+    <div class="pin" style="top:76%;left:38%"></div>
+    <div class="pin" style="top:53%;left:22%"></div>
+    <svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none" preserveAspectRatio="none">
+      <polyline points="30%,24% 63%,40% 69%,63% 38%,76% 22%,53% 30%,24%" fill="none" stroke="#378ADD" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.45"/>
+    </svg>
+
+    <!-- 左上：ピン数 -->
+    <div class="map-pin-count"><i class="ti ti-map-pin" style="font-size:11px;margin-right:3px" aria-hidden="true"></i>5か所</div>
+    <!-- 右上：ヒートマップボタン -->
+    <div class="map-heatmap-btn"><i class="ti ti-flame" style="font-size:13px" aria-hidden="true"></i>ヒートマップ</div>
+    <!-- 左下：オートズームバッジ -->
+    <div class="autozoom-badge"><i class="ti ti-focus-2" style="font-size:11px" aria-hidden="true"></i>全ピンに自動フィット</div>
+
+    <div class="zoom-ctrl">
+      <span class="zoom-btn">+</span>
+      <span class="zoom-btn">−</span>
+    </div>
+  </div>
+
+  <div class="right" onclick="closeSort()">
+    <div class="photo-viewer">
+      <i class="ti ti-photo" style="font-size:36px;color:#8ab;opacity:0.4" aria-hidden="true"></i>
+      <div class="photo-arrow photo-arrow-l"><i class="ti ti-chevron-left" style="font-size:12px" aria-hidden="true"></i></div>
+      <div class="photo-arrow photo-arrow-r"><i class="ti ti-chevron-right" style="font-size:12px" aria-hidden="true"></i></div>
+      <div class="photo-counter">2 / 4</div>
+    </div>
+    <div class="detail-body">
+      <div class="detail-title">琵琶湖一周サイクリング</div>
+      <div class="detail-date">2024年9月14日（土）〜 15日（日）· 1泊2日</div>
+      <div class="prop-row">
+        <span class="prop-key">訪問地</span>
+        <div class="prop-tags"><span class="ptag">滋賀県</span></div>
+      </div>
+      <div class="prop-row">
+        <span class="prop-key">移動手段</span>
+        <div class="prop-tags"><span class="ptag ptag-blue">自転車</span><span class="ptag ptag-blue">電車</span></div>
+      </div>
+      <div class="prop-row">
+        <span class="prop-key">同行者</span>
+        <div class="prop-tags"><span class="ptag ptag-teal">一人</span></div>
+      </div>
+      <div class="prop-row">
+        <span class="prop-key">宿泊所</span>
+        <span style="font-size:12px;color:var(--color-text-primary)">大津プリンスホテル</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-key">タグ</span>
+        <div class="prop-tags"><span class="ptag ptag-purple">ビワイチ</span><span class="ptag ptag-purple">達成</span></div>
+      </div>
+      <div class="prop-row">
+        <span class="prop-key">メモ</span>
+        <div class="memo-box">北湖を反時計回りで走破。追い風で想定より早く完走できた。彦根城付近の景色が特によかった。</div>
+      </div>
+    </div>
+    <div class="detail-footer">
+      <button class="btn-sm"><i class="ti ti-edit" style="font-size:11px" aria-hidden="true"></i> 編集</button>
+      <button class="btn-sm"><i class="ti ti-trash" style="font-size:11px" aria-hidden="true"></i> 削除</button>
+    </div>
+  </div>
+
+</div>
+<p style="font-size:11px;color:var(--color-text-secondary);margin-top:8px;text-align:center">※ 地図・写真部分はイメージ。実装時は Leaflet.js + OpenStreetMap を使用</p>
+</div>
+
+<script>
+function toggleSort(){
+  const dd=document.getElementById('sort-dropdown');
+  const btn=document.getElementById('sort-btn');
+  const visible=dd.style.display==='block';
+  dd.style.display=visible?'none':'block';
+  btn.classList.toggle('active',!visible);
+}
+function closeSort(){
+  document.getElementById('sort-dropdown').style.display='none';
+  document.getElementById('sort-btn').classList.remove('active');
+}
+function selectSort(el){
+  document.querySelectorAll('.sort-option').forEach(o=>{
+    o.classList.remove('selected');
+    o.querySelector('.sort-check').textContent=' ';
+  });
+  el.classList.add('selected');
+  el.querySelector('.sort-check').textContent='✓';
+  setTimeout(closeSort,120);
+}
+</script>
