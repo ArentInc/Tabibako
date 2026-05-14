@@ -547,10 +547,11 @@
     .tabibako-pin-default .ti { color: var(--color-text-info); }
     /* 選択時の他旅行ピン（控えめにグレー青で背景化） */
     .tabibako-pin-dim .ti { color: var(--color-pin-dim); }
-    /* 選択中の旅行のピン（強調オレンジ） */
+    /* 選択中の旅行のピン（強調オレンジ）。
+       font-size 拡大は iconAnchor がずれるため避け、影を強めて視認性を確保 */
     .tabibako-pin-selected .ti {
       color: var(--color-pin-selected);
-      font-size: 36px;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
     }
 
     /* ===== 地図ピックモード ===== */
@@ -1501,13 +1502,18 @@
           this.renderDraftPins();
           this.photoUpload.resetAndRender(); // pending を解放
 
-          // モーダル open 前の選択を復元
+          // モーダル open 前の選択を復元（trip が削除済みなら復元しない）
           const restoreId = this._preModalSelectedId;
           this._preModalSelectedId = null;
-          if (restoreId) {
+          if (restoreId && this.state.trips.some(t => t.id === restoreId)) {
             this.state.selectedTripId = restoreId;
             this.renderTripDetail();
             this.photoViewer.load(this.getSelectedTrip());
+          } else {
+            // 削除済みの場合はクリア
+            this.state.selectedTripId = null;
+            this.renderTripDetail();
+            this.photoViewer.clear();
           }
           // 全ピン表示を復元（state.draft null）。selectedTripId 復元の有無に関わらず必要
           this.renderTripList();
@@ -1557,7 +1563,7 @@
               catch (err) { console.warn('古い写真の削除に失敗:', id, err); }
             }
 
-            this.renderTripList();
+            // renderTripList は modalClose 末尾で呼ばれるので個別呼び出し不要
             this.modalClose();
           } catch (err) {
             console.error('保存に失敗:', err);
@@ -1598,8 +1604,8 @@
         // 同じ ID をもう一度クリックで解除（toggle）
         selectTrip(tripId) {
           this.state.selectedTripId = (this.state.selectedTripId === tripId) ? null : tripId;
+          // renderTripList が内部で renderSelectedTripPins を呼ぶので個別呼び出し不要
           this.renderTripList();
-          this.renderSelectedTripPins();
           this.renderTripDetail();
           this.photoViewer.load(this.getSelectedTrip());
           this.updateActionButtons();
@@ -1675,8 +1681,8 @@
             catch (err) { console.warn('写真の削除に失敗:', photo.id, err); }
           }
 
+          // renderTripList が renderSelectedTripPins を含むので個別呼び出し不要
           this.renderTripList();
-          this.renderSelectedTripPins();
           this.renderTripDetail();
           this.photoViewer.clear();
           this.updateActionButtons();
@@ -2675,10 +2681,10 @@
         renderTripList() {
           // 絞り込み UI を最新の値プールで再描画
           this.filter.render();
-          // フィルター変更・旅行追加削除に応じて地図ピンも更新（Issue #5 で連動化）
-          this.renderSelectedTripPins();
-          // ヒートマップもフィルタ変更・旅行追加削除に追従させる
+          // 順序：heatmap → pins。heatmap.toggle と同じ順序にすることで
+          // レイヤー切替時の見た目不整合を防ぐ
           this.heatmap.render();
+          this.renderSelectedTripPins();
 
           const container = this.el['trip-list'];
           if (this.state.trips.length === 0) {
