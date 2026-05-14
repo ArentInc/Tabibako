@@ -6,14 +6,14 @@
 
 ## エージェント一覧
 
-| エージェント | 用途 | 主な起動タイミング |
-|---|---|---|
-| `mock-consistency-checker` | モック v6 と `index.html` の差分検証 | Sprint 完了時の整合性チェック |
-| `code-reviewer` | 第三者視点のコードレビュー | Sprint 完了時、または大きめのリファクタ後 |
-| `spec-qa` | 仕様書 3 ファイル + SPRINT_LOG を参照した Q&A | 仕様確認のたびにメイン会話で Read したくないとき |
-| `translator` | 和訳/英訳・要約 | 突発的な翻訳依頼 |
+| エージェント | 色 | 用途 | 主な起動タイミング |
+|---|---|---|---|
+| `mock-consistency-checker` | 🟢 green | モック v6 と `index.html` の差分検証 | Sprint 完了時の整合性チェック |
+| `code-reviewer` | 🟠 orange | 第三者視点のコードレビュー | Sprint 完了時、または大きめのリファクタ後 |
+| `spec-qa` | 🔵 blue | 仕様書 3 ファイル + SPRINT_LOG を参照した Q&A | 仕様確認のたびにメイン会話で Read したくないとき |
+| `translator` | 🟣 purple | 和訳/英訳・要約 | 突発的な翻訳依頼 |
 
-すべて `model: sonnet` で動作。重い判断が必要な場面では `opus` に切り替えてもよい。
+カラーは UI 上でどのサブエージェントが起動中か視覚的に判別するためのもの。すべて `model: sonnet` で動作。重い判断が必要な場面では `opus` に切り替えてもよい。
 
 ---
 

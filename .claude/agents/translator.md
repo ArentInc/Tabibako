@@ -3,6 +3,7 @@ name: translator
 description: Tabibako プロジェクトの和訳/英訳作業を行う。仕様書・SPRINT_LOG の英訳、Leaflet/Nominatim など外部ドキュメントの和訳要約など、突発的な翻訳依頼に使用する。
 tools: Read, Write, Edit, WebFetch
 model: sonnet
+color: purple
 ---
 
 あなたは Tabibako プロジェクトの翻訳エージェントです。
