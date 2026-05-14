@@ -919,10 +919,10 @@
         </div>
       </div>
       <div class="detail-footer">
-        <button class="btn-sm" type="button" disabled>
+        <button class="btn-sm" id="edit-btn" type="button" disabled>
           <i class="ti ti-edit" style="font-size:11px" aria-hidden="true"></i> 編集
         </button>
-        <button class="btn-sm" type="button" disabled>
+        <button class="btn-sm" id="delete-btn" type="button" disabled>
           <i class="ti ti-trash" style="font-size:11px" aria-hidden="true"></i> 削除
         </button>
       </div>
@@ -1023,14 +1023,29 @@
       const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org';
       const NOMINATIM_MIN_INTERVAL_MS = 1000; // 公式利用規約：1 req/sec
       const SEARCH_DEBOUNCE_MS = 500;
+      // 47 都道府県（display_name に含まれているかの判定用）
+      const PREFECTURES = [
+        '北海道',
+        '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県',
+        '茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '東京都', '神奈川県',
+        '新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県',
+        '岐阜県', '静岡県', '愛知県', '三重県',
+        '滋賀県', '京都府', '大阪府', '兵庫県', '奈良県', '和歌山県',
+        '鳥取県', '島根県', '岡山県', '広島県', '山口県',
+        '徳島県', '香川県', '愛媛県', '高知県',
+        '福岡県', '佐賀県', '長崎県', '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県',
+      ];
 
       const App = {
         state: {
           trips: [],
-          draft: null,             // モーダルで編集中の旅行データ
-          pickMode: false,         // 地図クリックで場所追加モード
-          selectedTripId: null,    // 左パネルで選択中の旅行 ID（null = 未選択）
+          draft: null,                       // モーダルで編集中の旅行データ
+          pickMode: false,                   // 地図クリックで場所追加モード
+          selectedTripId: null,              // 左パネルで選択中の旅行 ID（null = 未選択）
+          editingTripId: null,               // モーダルが編集モードのとき、対象 trip の ID
+          editingOriginalPhotoIds: [],       // 編集前の写真 ID 一覧（削除判定に使用）
         },
+        _preModalSelectedId: null,           // モーダル open 直前の selectedTripId を保持
         map: null,
         draftMarkers: [],
         selectedTripMarkers: [],
@@ -1047,12 +1062,15 @@
           this.photoViewer.bindEvents();
           this.mapInit();
           this.renderTripList();
+          this.updateActionButtons();
         },
 
         cacheElements() {
           const ids = [
             'add-btn', 'trip-list', 'pin-count-value', 'detail-body', 'photo-viewer',
+            'edit-btn', 'delete-btn',
             'modal-backdrop', 'modal-close-btn', 'modal-cancel-btn', 'modal-save-btn',
+            'modal-title',
             'trip-name', 'trip-start', 'trip-end',
             'trip-accommodation', 'trip-memo',
             'place-search', 'search-results', 'place-list', 'map-pick-btn',
@@ -1068,6 +1086,12 @@
           this.el['modal-cancel-btn'].addEventListener('click', () => this.modalClose());
           this.el['modal-save-btn'].addEventListener('click', () => this.modalSave());
           this.el['map-pick-btn'].addEventListener('click', () => this.setPickMode(true));
+          this.el['edit-btn'].addEventListener('click', () => {
+            if (this.state.selectedTripId) this.modalOpen(this.state.selectedTripId);
+          });
+          this.el['delete-btn'].addEventListener('click', () => {
+            if (this.state.selectedTripId) this.deleteSelectedTrip();
+          });
 
           // 旅行カードのクリック（event delegation: 動的に追加されるカードに自動対応）
           this.el['trip-list'].addEventListener('click', (e) => {
@@ -1249,21 +1273,59 @@
         },
 
         // ===== Modal =====
-        modalOpen() {
-          this.state.draft = this.createBlankTrip();
-          this.el['trip-name'].value = '';
-          this.el['trip-start'].value = '';
-          this.el['trip-end'].value = '';
-          this.el['trip-accommodation'].value = '';
-          this.el['trip-memo'].value = '';
+        // tripId が null なら新規追加、文字列なら該当 trip の編集
+        async modalOpen(tripId = null) {
+          const editing = tripId != null;
+          const existing = editing ? this.state.trips.find(t => t.id === tripId) : null;
+          if (editing && !existing) {
+            console.error('編集対象の旅行が見つかりません:', tripId);
+            return;
+          }
+
+          // 編集モード時は selected の重複ピン表示を避けるため selection を一時クリア。
+          // modalClose で復元する
+          this._preModalSelectedId = this.state.selectedTripId;
+          if (editing) {
+            this.state.selectedTripId = null;
+            this.renderTripList();
+            this.renderSelectedTripPins();
+            this.renderTripDetail();
+            this.photoViewer.clear();
+          }
+
+          // 編集 trip のディープクローン（保存まで原本に触らない）
+          this.state.draft = editing
+            ? JSON.parse(JSON.stringify(existing))
+            : this.createBlankTrip();
+          this.state.editingTripId = editing ? tripId : null;
+          this.state.editingOriginalPhotoIds = editing
+            ? (existing.photos || []).map(p => p.id)
+            : [];
+
+          // フォームフィールドにデータを反映
+          const draft = this.state.draft;
+          this.el['trip-name'].value = draft.name || '';
+          this.el['trip-start'].value = draft.startDate || '';
+          this.el['trip-end'].value = draft.endDate || '';
+          this.el['trip-accommodation'].value = draft.accommodation || '';
+          this.el['trip-memo'].value = draft.memo || '';
           this.el['place-search'].value = '';
           this.el['form-error'].hidden = true;
+          this.el['modal-title'].textContent = editing ? '旅行を編集' : '旅行を追加';
+
           this.renderSearchResults(null);
           this.renderPlaceList();
           this.renderDraftPins();
           this.multiSelect.resetAndRenderAll();
-          this.photoUpload.resetAndRender();
+
+          // 既存写真をプリロード（編集モード時）/ クリア（新規時）
+          if (editing && existing.photos && existing.photos.length > 0) {
+            await this.photoUpload.loadFromTrip(existing.photos);
+          } else {
+            this.photoUpload.resetAndRender();
+          }
           this.photoUpload.bindEvents();
+
           this.el['modal-backdrop'].hidden = false;
           this.el['trip-name'].focus();
         },
@@ -1272,8 +1334,22 @@
           this.setPickMode(false);
           this.el['modal-backdrop'].hidden = true;
           this.state.draft = null;
+          this.state.editingTripId = null;
+          this.state.editingOriginalPhotoIds = [];
           this.renderDraftPins();
           this.photoUpload.resetAndRender(); // pending を解放
+
+          // モーダル open 前の選択を復元
+          const restoreId = this._preModalSelectedId;
+          this._preModalSelectedId = null;
+          if (restoreId) {
+            this.state.selectedTripId = restoreId;
+            this.renderTripList();
+            this.renderSelectedTripPins();
+            this.renderTripDetail();
+            this.photoViewer.load(this.getSelectedTrip());
+          }
+          this.updateActionButtons();
         },
 
         async modalSave() {
@@ -1298,7 +1374,22 @@
           this.el['modal-save-btn'].disabled = true;
           try {
             draft.photos = await this.photoUpload.commitToDraft();
-            this.state.trips.push(draft);
+
+            if (this.state.editingTripId) {
+              // 編集モード: 既存 trip を置換 + 削除された写真を IDB からも消す
+              const newPhotoIds = new Set(draft.photos.map(p => p.id));
+              const toDelete = this.state.editingOriginalPhotoIds.filter(id => !newPhotoIds.has(id));
+              for (const id of toDelete) {
+                try { await this.photoDB.delete(id); }
+                catch (err) { console.warn('古い写真の削除に失敗:', id, err); }
+              }
+              const idx = this.state.trips.findIndex(t => t.id === this.state.editingTripId);
+              if (idx >= 0) this.state.trips[idx] = draft;
+            } else {
+              // 新規モード
+              this.state.trips.push(draft);
+            }
+
             this.storage.save();
             this.renderTripList();
             this.modalClose();
@@ -1327,7 +1418,7 @@
             startDate: '',
             endDate: '',
             places: [],
-            prefectures: [],   // Sprint 5 で自動判定
+            regions: [],       // Sprint 5 で自動判定（国内=都道府県・海外=国名）
             accommodation: '', // Sprint 4
             transport: [],     // Sprint 4
             companions: [],    // Sprint 4
@@ -1345,6 +1436,37 @@
           this.renderSelectedTripPins();
           this.renderTripDetail();
           this.photoViewer.load(this.getSelectedTrip());
+          this.updateActionButtons();
+        },
+
+        // 右パネル下部の編集・削除ボタンの活性状態を選択状況に同期
+        updateActionButtons() {
+          const hasSelection = !!this.state.selectedTripId;
+          if (this.el['edit-btn']) this.el['edit-btn'].disabled = !hasSelection;
+          if (this.el['delete-btn']) this.el['delete-btn'].disabled = !hasSelection;
+        },
+
+        // 選択中の旅行を削除（確認ダイアログ → IDB 写真クリーンアップ → state 更新）
+        async deleteSelectedTrip() {
+          const trip = this.getSelectedTrip();
+          if (!trip) return;
+          const message = `「${trip.name}」を削除しますか？\n（取り消しできません。関連する写真もすべて削除されます）`;
+          if (!confirm(message)) return;
+
+          // IDB から写真を削除（失敗しても続行：state.trips の削除は完遂する）
+          for (const photo of (trip.photos || [])) {
+            try { await this.photoDB.delete(photo.id); }
+            catch (err) { console.warn('写真の削除に失敗:', photo.id, err); }
+          }
+
+          this.state.trips = this.state.trips.filter(t => t.id !== trip.id);
+          this.state.selectedTripId = null;
+          this.storage.save();
+          this.renderTripList();
+          this.renderSelectedTripPins();
+          this.renderTripDetail();
+          this.photoViewer.clear();
+          this.updateActionButtons();
         },
 
         getSelectedTrip() {
@@ -1363,7 +1485,9 @@
         // ===== Draft places =====
         addPlaceToDraft(place) {
           if (!this.state.draft) return;
+          place.region = this.extractRegion(place.name);
           this.state.draft.places.push(place);
+          this.recomputeRegions(this.state.draft);
           this.el['place-search'].value = '';
           this.renderSearchResults(null);
           this.renderPlaceList();
@@ -1373,6 +1497,7 @@
         removePlaceFromDraft(index) {
           if (!this.state.draft) return;
           this.state.draft.places.splice(index, 1);
+          this.recomputeRegions(this.state.draft);
           this.renderPlaceList();
           this.renderDraftPins();
         },
@@ -1383,6 +1508,18 @@
             try {
               const raw = localStorage.getItem(STORAGE_KEY);
               App.state.trips = raw ? JSON.parse(raw) : [];
+              // マイグレーション：旧 prefecture/prefectures → 新 region/regions。
+              // 既存データの region を display_name から再抽出（国内=都道府県・海外=国名）
+              for (const trip of App.state.trips) {
+                if (!Array.isArray(trip.places)) trip.places = [];
+                for (const p of trip.places) {
+                  if (!p.region && p.prefecture) p.region = p.prefecture;
+                  if (!p.region) p.region = App.extractRegion(p.name);
+                  delete p.prefecture;
+                }
+                App.recomputeRegions(trip);
+                delete trip.prefectures;
+              }
             } catch (err) {
               console.error('localStorage の読み込みに失敗', err);
               App.state.trips = [];
@@ -1802,12 +1939,33 @@
           JPEG_QUALITY: 0.80,
           MAX_PHOTOS_PER_UPLOAD: 10,
 
-          // 編集中の写真候補 [{ id, dataURL }]。modalSave で IDB に書く
+          // 編集中の写真候補 [{ id, dataURL, isNew }]。modalSave で IDB に書く
+          // isNew=true: 新規アップロード（IDB に未保存、commitToDraft で put が必要）
+          // isNew=false: 既存写真ロード（IDB に既にある、put 不要）
           _pending: [],
           _eventsBound: false,
 
           resetAndRender() {
             this._pending = [];
+            this.render();
+          },
+
+          // 編集モーダル開始時、既存 trip の写真を IDB から読み込んで pending に展開
+          async loadFromTrip(photoRefs) {
+            this._pending = [];
+            if (!photoRefs || photoRefs.length === 0) {
+              this.render();
+              return;
+            }
+            try {
+              const ids = photoRefs.map(r => r.id);
+              const photos = await App.photoDB.getMany(ids);
+              this._pending = photos
+                .filter(p => p !== null)
+                .map(p => ({ id: p.id, dataURL: p.dataURL, isNew: false }));
+            } catch (err) {
+              console.error('既存写真の読み込みに失敗', err);
+            }
             this.render();
           },
 
@@ -1859,7 +2017,7 @@
               progress.textContent = `処理中... ${++completed}/${files.length}`;
               try {
                 const dataURL = await this.resizeImage(file);
-                this._pending.push({ id: crypto.randomUUID(), dataURL });
+                this._pending.push({ id: crypto.randomUUID(), dataURL, isNew: true });
                 this.render();
               } catch (err) {
                 console.error('写真処理に失敗:', file.name, err);
@@ -1873,7 +2031,7 @@
             this.render();
           },
 
-          // modalSave 時に呼ばれる。pending を IDB に書き、draft.photos に入れる [{ id }] を返す。
+          // modalSave 時に呼ばれる。pending の isNew=true のみ IDB に書く（既存は put 不要）。
           // 1 枚でも失敗があれば throw して呼び出し側に伝える（中途半端な保存を防ぐため）
           async commitToDraft() {
             const refs = [];
@@ -1881,7 +2039,9 @@
             const now = Date.now();
             for (const p of this._pending) {
               try {
-                await App.photoDB.put({ id: p.id, dataURL: p.dataURL, createdAt: now });
+                if (p.isNew) {
+                  await App.photoDB.put({ id: p.id, dataURL: p.dataURL, createdAt: now });
+                }
                 refs.push({ id: p.id });
               } catch (err) {
                 console.error('写真の IDB 保存に失敗:', err);
@@ -2052,6 +2212,13 @@
               <div class="trip-card-tags">
                 ${allTags.map(t => `<span class="trip-card-tag trip-card-tag-${t.kind}">${this.escape(t.value)}</span>`).join('')}
               </div>` : '';
+            // 訪問地域の表示。日本国内は都道府県・海外は国名。判定不能 or 訪問場所なしのときはバックアップ表示
+            const placeCount = (trip.places || []).length;
+            const regions = trip.regions || [];
+            let geographyText;
+            if (placeCount === 0) geographyText = '訪問場所なし';
+            else if (regions.length === 0) geographyText = '訪問地域未判定';
+            else geographyText = regions.join('・');
             return `
             <div class="trip-card${isSelected ? ' selected' : ''}" data-trip-id="${this.escape(trip.id)}"
                  role="button" tabindex="0" aria-pressed="${isSelected ? 'true' : 'false'}">
@@ -2063,7 +2230,7 @@
                 </div>
                 <div class="trip-card-meta-row">
                   <i class="ti ti-map-pin" style="font-size:11px" aria-hidden="true"></i>
-                  <span>訪問場所 ${trip.places.length} か所</span>
+                  <span>${this.escape(geographyText)}</span>
                 </div>
               </div>
               ${tagsHtml}
@@ -2093,6 +2260,15 @@
               <div class="detail-section-value">${this.escape(trip.startDate)} 〜 ${this.escape(trip.endDate)}</div>
             </div>
           `);
+
+          if (trip.regions && trip.regions.length > 0) {
+            sections.push(`
+              <div class="detail-section">
+                <div class="detail-section-label">訪問地域</div>
+                <div class="detail-section-value">${this.escape(trip.regions.join('・'))}</div>
+              </div>
+            `);
+          }
 
           if (trip.places && trip.places.length > 0) {
             const placeListHtml = trip.places.map(p => `
@@ -2216,6 +2392,24 @@
         },
 
         // ===== Helpers =====
+        // 訪問地域を display_name から抽出：日本国内は都道府県、海外は国名（display_name 末尾）
+        extractRegion(name) {
+          if (!name) return null;
+          const pref = PREFECTURES.find(p => name.includes(p));
+          if (pref) return pref;
+          // 都道府県マッチなし → 海外。カンマ区切り末尾を国名として扱う
+          const parts = name.split(',').map(s => s.trim()).filter(Boolean);
+          if (parts.length === 0) return null;
+          return parts[parts.length - 1];
+        },
+
+        // trip.regions を trip.places の region から再計算（重複除去）
+        recomputeRegions(trip) {
+          if (!trip) return;
+          const places = trip.places || [];
+          trip.regions = [...new Set(places.map(p => p.region).filter(Boolean))];
+        },
+
         debounce(fn, ms) {
           let timer;
           return (...args) => {
