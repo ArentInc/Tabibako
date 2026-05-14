@@ -15,7 +15,7 @@
   <!-- Tabler Icons -->
   <link
     rel="stylesheet"
-    href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.5.0/tabler-icons.min.css"
+    href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.5.0/dist/tabler-icons.min.css"
   />
 
   <style>
@@ -25,6 +25,7 @@
       --color-background-secondary: #f5f5f4;
       --color-background-info: #e6f1fb;
       --color-background-success: #e1f5ee;
+      --color-background-photo-placeholder: #c9d9e8;
 
       --color-border-secondary: #d6d3d1;
       --color-border-tertiary: #e7e5e4;
@@ -35,6 +36,7 @@
       --color-text-secondary: #78716c;
       --color-text-info: #0c447c;
       --color-text-success: #085041;
+      --color-text-photo-placeholder: #8ab;
 
       --border-radius-md: 6px;
       --border-radius-lg: 10px;
@@ -54,7 +56,7 @@
     /* ===== アプリ全体（3カラム / 100vh） ===== */
     .app {
       display: grid;
-      grid-template-columns: 256px 1fr 260px;
+      grid-template-columns: 384px 1fr 390px;
       height: 100vh;
       overflow: hidden;
     }
@@ -175,8 +177,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #c9d9e8;
-      color: #8ab;
+      background: var(--color-background-photo-placeholder);
+      color: var(--color-text-photo-placeholder);
     }
     .detail-body {
       flex: 1;
@@ -236,7 +238,7 @@
 
     <!-- 中央パネル：地図 -->
     <main class="center" aria-label="地図">
-      <div id="map" role="application" aria-label="OpenStreetMap"></div>
+      <div id="map"></div>
 
       <!-- 左上：ピン数表示（Sprint 2 以降で動的化） -->
       <div class="map-pin-count" id="pin-count">
@@ -284,9 +286,12 @@
     const map = L.map('map', {
       center: [36.5, 138.0],
       zoom: 5,
-      zoomControl: true,
+      zoomControl: false,
       worldCopyJump: true,
     });
+
+    // ズームコントロールは右下に配置（モック準拠 / 左上のピン数バッジとの重なり回避）
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
