@@ -215,6 +215,12 @@
 - [ ] 別のカードをクリック → 旧選択が解除され、新選択が反映される
 - [ ] モーダルで新規旅行を登録中も、選択中の旅行のピンは残っている（両者合算でカウント表示）
 
+### レビュー指摘と修正（Sprint 3、2026-05-14）
+
+| 指摘 | 原因 | 修正 |
+|------|------|------|
+| 旅行カードがキーボード操作非対応（`<div>` + click のみ。Tab で到達できず、Enter/Space で選択できない） | `<div role="button">` を付けず素の div で実装していた。Sprint 1 で `role="application"` を a11y アンチパターンとして除去した経緯と整合性が取れていなかった | `<div>` に `role="button"` `tabindex="0"` `aria-pressed="<bool>"` を追加。trip-list の event delegation に keydown ハンドラを追加して Enter/Space で `selectTrip` 呼び出し。`.trip-card:focus-visible` でキーボード操作時のみフォーカスリング表示 |
+
 ---
 
 ## Sprint 4：残りのプロパティ入力と写真（未着手）

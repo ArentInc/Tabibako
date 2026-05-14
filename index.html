@@ -290,6 +290,11 @@
       border-color: var(--color-border-info);
       background: var(--color-background-info);
     }
+    /* キーボード操作時のみフォーカスリング表示。マウスクリックでは出ない */
+    .trip-card:focus-visible {
+      outline: 2px solid var(--color-border-info);
+      outline-offset: 1px;
+    }
     .trip-card-name {
       font-size: 13px;
       font-weight: 500;
@@ -699,6 +704,15 @@
             this.selectTrip(card.dataset.tripId);
           });
 
+          // 旅行カードのキーボード操作（Enter / Space で選択 toggle）
+          this.el['trip-list'].addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            const card = e.target.closest('.trip-card');
+            if (!card) return;
+            e.preventDefault();
+            this.selectTrip(card.dataset.tripId);
+          });
+
           // 住所検索（debounce）。空入力時は pending 中の検索も無効化
           this.el['place-search'].addEventListener('input', this.debounce(() => {
             const q = this.el['place-search'].value.trim();
@@ -992,8 +1006,11 @@
             return;
           }
           const selectedId = this.state.selectedTripId;
-          container.innerHTML = trips.map(trip => `
-            <div class="trip-card${trip.id === selectedId ? ' selected' : ''}" data-trip-id="${this.escape(trip.id)}">
+          container.innerHTML = trips.map(trip => {
+            const isSelected = trip.id === selectedId;
+            return `
+            <div class="trip-card${isSelected ? ' selected' : ''}" data-trip-id="${this.escape(trip.id)}"
+                 role="button" tabindex="0" aria-pressed="${isSelected ? 'true' : 'false'}">
               <div class="trip-card-name">${this.escape(trip.name)}</div>
               <div class="trip-card-meta">
                 <div class="trip-card-meta-row">
@@ -1006,7 +1023,8 @@
                 </div>
               </div>
             </div>
-          `).join('');
+          `;
+          }).join('');
         },
 
         // 右パネル詳細：選択中の旅行の情報を描画。Sprint 4 で transport/companions/memo/photos 追加
