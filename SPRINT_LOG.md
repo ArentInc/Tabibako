@@ -574,6 +574,25 @@
 - **ヒートマップとピンの併用要望が出たら**：別 layer として共存可能。現状の排他切替を `expanded mode` 等で拡張する余地あり
 - **ヒートマップパラメータ調整**：少量データでも視認できるよう `radius: 35` / `blur: 25` / `minOpacity: 0.35` に設定。デフォルトより強め
 
+### レビュー指摘と修正（Sprint 6、2026-05-14）
+
+| 指摘 | 原因 | 修正 |
+|------|------|------|
+| ヒートマップボタンの初期 `aria-pressed` / `aria-label` 欠落（SR が状態認識不可） | HTML に書かず JS で動的設定していた | HTML に初期値を直書き |
+| `fitMapToSelectedTrip` の NaN / 範囲外座標耐性なし | 不正座標で `L.latLngBounds` が無音失敗 or 地図破壊 | `Number.isFinite` + 緯度経度範囲チェックで除外、`bounds.isValid()` 確認 |
+| `heatmap.render()` の `App.map` null チェックなし | init 順序によっては NPE のリスク | 冒頭ガード `if (!App.map) return;` |
+| `devClearAll` の localStorage キーをハードコード重複 | 各モジュールの定数を再定義 | 各モジュールの `STORAGE_KEY` / `POOL_KEYS` を参照する形に集約 |
+| `init` 末尾で `heatmap.render()` が二重実行 | `renderTripList` 内でも呼ばれているため | init 側の明示呼び出しを削除（コメントで意図明示） |
+
+### Sprint 7 着手前の検討項目（レビュー指摘の据え置き分）
+
+- **dev ヘルパの本番分離方針**：`DEV` フラグ or コメント目印で削除しやすくする検討
+- **Leaflet.heat の SRI ハッシュ**：将来 GitHub Pages 公開時の整合性のため付与検討
+- **localStorage キー集約**：複数モジュールに散らばっているキーをルート定数に集める
+- **`heatmap.render()` の呼び頻度**：`renderTripList` 都度ではなく差分更新で十分なケースが多い
+- **ヒートマップ ON 時 + 旅行選択時の UX**：現状「fit しない + 個別ピンも出ない」で挙動不明瞭。可視ハイライト追加余地
+- **devLoadSamples 配列の本体混在**：80 行のサンプル配列を別ブロックに切る or 別ファイル化（単一 HTML 方針との整合は要検討）
+
 ### Dev ヘルパ（コンソールから手動実行）
 
 Sprint 6 実装中、データが少ないとヒートマップの視認性が低いため、テスト用のヘルパを実装：

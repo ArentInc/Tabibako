@@ -1001,7 +1001,8 @@
       </div>
 
       <!-- 右上：ヒートマップ切替（Sprint 6 で機能実装） -->
-      <button class="map-heatmap-btn" id="heatmap-btn" type="button">
+      <button class="map-heatmap-btn" id="heatmap-btn" type="button"
+              aria-pressed="false" aria-label="ヒートマップ表示切り替え">
         <i class="ti ti-flame" style="font-size:13px" aria-hidden="true"></i>
         <span>ヒートマップ</span>
       </button>
@@ -1173,7 +1174,7 @@
           this.filter.bindEvents();
           this.heatmap.bindEvents();
           this.mapInit();
-          this.heatmap.render(); // 永続化された状態を地図初期化後に反映
+          // renderTripList の末尾で heatmap.render() が呼ばれるので、ここでの追加呼び出しは不要
           this.renderTripList();
           this.updateActionButtons();
         },
@@ -1576,18 +1577,24 @@
         },
 
         // 選択中の旅行の全 places が画面内に収まるよう地図ビューを調整。
+        // 選択解除（selectedTripId が null）になったときは何もしない（現在のビューを保持）。
         // ヒートマップ ON 時は俯瞰モード優先で何もしない
         fitMapToSelectedTrip() {
           if (this.heatmap.isEnabled()) return;
           const trip = this.getSelectedTrip();
           if (!trip) return;
-          const places = trip.places || [];
-          if (places.length === 0) return;
-          if (places.length === 1) {
-            this.map.setView([places[0].lat, places[0].lng], 12);
+          // 不正座標（NaN・範囲外）を除外してから判定
+          const valid = (trip.places || []).filter(p =>
+            Number.isFinite(p.lat) && Number.isFinite(p.lng) &&
+            Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180
+          );
+          if (valid.length === 0) return;
+          if (valid.length === 1) {
+            this.map.setView([valid[0].lat, valid[0].lng], 12);
             return;
           }
-          const bounds = L.latLngBounds(places.map(p => [p.lat, p.lng]));
+          const bounds = L.latLngBounds(valid.map(p => [p.lat, p.lng]));
+          if (!bounds.isValid()) return;
           this.map.fitBounds(bounds, { padding: [40, 40] });
         },
 
@@ -2597,6 +2604,8 @@
           },
 
           render() {
+            // map 未初期化（init 順序で renderTripList が先に走るケース）では何もしない
+            if (!App.map) return;
             // 旧レイヤーを必ず除去
             if (this._layer) {
               App.map.removeLayer(this._layer);
@@ -3011,8 +3020,15 @@
 
       window.devClearAll = async function () {
         if (!confirm('すべてのデータ（旅行・値プール・写真・絞り込み/ソート状態）を消去します。よろしいですか？')) return;
-        ['tabibako_trips', 'tabibako_transport_pool', 'tabibako_companions_pool', 'tabibako_tags_pool',
-          'tabibako_sort', 'tabibako_filter', 'tabibako_heatmap'].forEach(k => localStorage.removeItem(k));
+        // 各モジュールの定数から集約。キー追加時の更新漏れを防ぐ
+        const keys = [
+          STORAGE_KEY,
+          ...Object.values(App.multiSelect.POOL_KEYS),
+          App.filter.STORAGE_KEY,
+          App.sort.STORAGE_KEY,
+          App.heatmap.STORAGE_KEY,
+        ];
+        keys.forEach(k => localStorage.removeItem(k));
         try {
           const db = App.photoDB._db;
           if (db) {
