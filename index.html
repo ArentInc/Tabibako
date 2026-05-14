@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tabibako（旅箱）</title>
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <!-- Tabler Icons -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.5.0/tabler-icons.min.css"
+  />
+
+  <style>
+    /* ===== デザイントークン（モック v6 をベースに定義） ===== */
+    :root {
+      --color-background-primary: #ffffff;
+      --color-background-secondary: #f5f5f4;
+      --color-background-info: #e6f1fb;
+      --color-background-success: #e1f5ee;
+
+      --color-border-secondary: #d6d3d1;
+      --color-border-tertiary: #e7e5e4;
+      --color-border-info: #b5d4f4;
+      --color-border-success: #9fe1cb;
+
+      --color-text-primary: #1c1917;
+      --color-text-secondary: #78716c;
+      --color-text-info: #0c447c;
+      --color-text-success: #085041;
+
+      --border-radius-md: 6px;
+      --border-radius-lg: 10px;
+    }
+
+    /* ===== ベース ===== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans",
+        "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", sans-serif;
+      font-size: 13px;
+      color: var(--color-text-primary);
+      background: var(--color-background-secondary);
+    }
+
+    /* ===== アプリ全体（3カラム / 100vh） ===== */
+    .app {
+      display: grid;
+      grid-template-columns: 256px 1fr 260px;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ===== 左パネル ===== */
+    .left {
+      background: var(--color-background-primary);
+      border-right: 0.5px solid var(--color-border-tertiary);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .left-toolbar {
+      padding: 8px 10px;
+      border-bottom: 0.5px solid var(--color-border-tertiary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .left-toolbar-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-primary);
+      flex: 1;
+    }
+    .icon-btn {
+      width: 26px;
+      height: 26px;
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: var(--border-radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      background: transparent;
+      color: var(--color-text-secondary);
+      flex-shrink: 0;
+    }
+    .icon-btn:hover { background: var(--color-background-secondary); }
+    .icon-btn.active {
+      background: var(--color-background-info);
+      border-color: var(--color-border-info);
+      color: var(--color-text-info);
+    }
+    .trip-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px;
+    }
+    .trip-list-empty {
+      padding: 24px 12px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--color-text-secondary);
+      line-height: 1.6;
+    }
+
+    /* ===== 中央パネル（地図） ===== */
+    .center {
+      position: relative;
+      overflow: hidden;
+    }
+    #map { position: absolute; inset: 0; }
+
+    .map-pin-count {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-tertiary);
+      border-radius: var(--border-radius-md);
+      padding: 4px 8px;
+      font-size: 11px;
+      color: var(--color-text-secondary);
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .map-heatmap-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 500;
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      white-space: nowrap;
+    }
+    .map-heatmap-btn:hover { background: var(--color-background-secondary); }
+
+    /* Leaflet 標準のズームコントロールはモックの右下配置にあわせて調整 */
+    .leaflet-bottom.leaflet-right { margin: 0 8px 12px 0; }
+
+    /* ===== 右パネル ===== */
+    .right {
+      background: var(--color-background-primary);
+      border-left: 0.5px solid var(--color-border-tertiary);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .photo-viewer {
+      height: 140px;
+      flex-shrink: 0;
+      border-bottom: 0.5px solid var(--color-border-tertiary);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #c9d9e8;
+      color: #8ab;
+    }
+    .detail-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+    .detail-empty {
+      padding: 24px 4px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--color-text-secondary);
+      line-height: 1.6;
+    }
+    .detail-footer {
+      padding: 8px 12px;
+      border-top: 0.5px solid var(--color-border-tertiary);
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .btn-sm {
+      font-size: 11px;
+      padding: 4px 10px;
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: var(--border-radius-md);
+      background: transparent;
+      color: var(--color-text-primary);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-sm:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- 左パネル：旅行一覧 -->
+    <aside class="left" aria-label="旅行一覧">
+      <div class="left-toolbar">
+        <span class="left-toolbar-title">Tabibako</span>
+        <button class="icon-btn" id="sort-btn" type="button" title="ソート" aria-label="ソート">
+          <i class="ti ti-arrows-sort" style="font-size:14px" aria-hidden="true"></i>
+        </button>
+        <button class="icon-btn" id="add-btn" type="button" title="旅行を追加" aria-label="旅行を追加">
+          <i class="ti ti-plus" style="font-size:14px" aria-hidden="true"></i>
+        </button>
+      </div>
+
+      <div class="trip-list" id="trip-list">
+        <div class="trip-list-empty">
+          まだ旅行が登録されていません。<br />
+          ＋ボタンから追加できるようになります。
+        </div>
+      </div>
+    </aside>
+
+    <!-- 中央パネル：地図 -->
+    <main class="center" aria-label="地図">
+      <div id="map" role="application" aria-label="OpenStreetMap"></div>
+
+      <!-- 左上：ピン数表示（Sprint 2 以降で動的化） -->
+      <div class="map-pin-count" id="pin-count">
+        <i class="ti ti-map-pin" style="font-size:11px" aria-hidden="true"></i>
+        <span>0か所</span>
+      </div>
+
+      <!-- 右上：ヒートマップ切替（Sprint 6 で機能実装） -->
+      <button class="map-heatmap-btn" id="heatmap-btn" type="button">
+        <i class="ti ti-flame" style="font-size:13px" aria-hidden="true"></i>
+        <span>ヒートマップ</span>
+      </button>
+    </main>
+
+    <!-- 右パネル：旅行詳細 -->
+    <aside class="right" aria-label="旅行詳細">
+      <div class="photo-viewer">
+        <i class="ti ti-photo" style="font-size:36px; opacity:0.4" aria-hidden="true"></i>
+      </div>
+      <div class="detail-body">
+        <div class="detail-empty">
+          旅行を選択すると、<br />ここに詳細が表示されます。
+        </div>
+      </div>
+      <div class="detail-footer">
+        <button class="btn-sm" type="button" disabled>
+          <i class="ti ti-edit" style="font-size:11px" aria-hidden="true"></i> 編集
+        </button>
+        <button class="btn-sm" type="button" disabled>
+          <i class="ti ti-trash" style="font-size:11px" aria-hidden="true"></i> 削除
+        </button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script>
+    // 地図初期化：日本全体がほぼ画面に収まるビュー
+    const map = L.map('map', {
+      center: [36.5, 138.0],
+      zoom: 5,
+      zoomControl: true,
+      worldCopyJump: true,
+    });
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+  </script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# Claude Code ローカル設定（プロジェクト固有の許可リスト等）
+.claude/settings.local.json
+.claude/.credentials.json
+
+# OS 生成ファイル
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# エディタ
+.vscode/
+.idea/
+*.swp
+*~
+
+# 翻訳エージェント出力（必要なら個別追加でコミット）
+*.en.md
+!CLAUDE.en.md
+!SPRINT_LOG.en.md
