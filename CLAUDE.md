@@ -48,7 +48,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - 残課題（次 Sprint / 持ち越し）
    - 既知の留意点
 3. Sprint 完了時、試行錯誤中のコメントアウトや未使用コードは削除してからログを書く（コンテキスト汚染回避）。
-4. 仕様とモック画面（`指示書/tabibako_mockup_v6.html`）で齟齬がある場合は **モックを正** とする。
+4. **モック v6（`指示書/tabibako_mockup_v6.html`）は参考扱い**。Sprint 4 以降はモック作成時点から仕様が乖離しているため、優先順位は SPRINT_LOG > 仕様書 > 過去議論 > モック の順。Sprint 完了時のモック整合性レビューは原則不要（Sprint 1〜3 までで実施済み）。
 
 ### 実装中の進捗管理
 
@@ -80,12 +80,12 @@ UI 変更時は実際にブラウザで開いてゴールデンパスと主要�
 
 ## 仕様参照の優先順位
 
-判断に迷ったときの参照優先順位：
+判断に迷ったときの参照優先順位（2026-05-14 以降の運用）：
 
-1. `指示書/tabibako_mockup_v6.html`（UI モック）— 画面デザインの最終判断はここ
-2. `指示書/tabibako_spec.md`（仕様書）— データ定義・機能一覧・ユーザーストーリー
-3. `指示書/tabibako_claude_code_prompt.md`（指示プロンプト）— Sprint 計画・実装方針
-4. `SPRINT_LOG.md`（開発ログ）— 過去の Sprint で確定した設計判断
+1. **`SPRINT_LOG.md`（開発ログ）** — 過去の Sprint で確定した設計判断。最新の意思決定が最も信頼できる
+2. **`指示書/tabibako_spec.md`（仕様書）** — データ定義・機能一覧・ユーザーストーリー
+3. **`指示書/tabibako_claude_code_prompt.md`（指示プロンプト）** — Sprint 計画・実装方針
+4. **`指示書/tabibako_mockup_v6.html`（UI モック）** — Sprint 1〜3 では「正」扱いだったが、Sprint 4 以降は乖離が大きい **参考資料**
 
 ## 進め方の前提
 

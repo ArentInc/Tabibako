@@ -1096,11 +1096,23 @@
             }
           }, SEARCH_DEBOUNCE_MS));
 
-          // Esc：ピックモード解除 or モーダル閉じる
+          // Document レベルのキーボードハンドラ集約
           document.addEventListener('keydown', (e) => {
-            if (e.key !== 'Escape') return;
-            if (this.state.pickMode) this.setPickMode(false);
-            else if (!this.el['modal-backdrop'].hidden) this.modalClose();
+            // Esc：ピックモード解除 or モーダル閉じる
+            if (e.key === 'Escape') {
+              if (this.state.pickMode) { this.setPickMode(false); return; }
+              if (!this.el['modal-backdrop'].hidden) { this.modalClose(); return; }
+            }
+            // 写真ビューア：矢印キーで前後切替（モーダル非表示時のみ・input/textarea フォーカス時は無視）
+            this.photoViewer.handleArrowKey(e);
+          });
+
+          // Document レベルのマウスダウン集約：multiselect 外クリックで閉じる。
+          // mousedown を使うのは、click 時点では multiselect の DOM が render() で
+          // 差し替わって e.target が detached になり closest() が機能しなくなるため
+          document.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.multiselect')) return;
+            this.multiSelect.closeAll();
           });
 
           // 背景クリックで閉じる（ピックモード中は無効）
@@ -1281,7 +1293,8 @@
             return;
           }
 
-          // 保存中は二重クリック防止のため save ボタンを無効化
+          // 保存中は二重クリック防止のため save ボタンを無効化。
+          // 写真コミット失敗時は trip 自体も保存しない（中途半端な状態を防ぐ）
           this.el['modal-save-btn'].disabled = true;
           try {
             draft.photos = await this.photoUpload.commitToDraft();
@@ -1289,6 +1302,10 @@
             this.storage.save();
             this.renderTripList();
             this.modalClose();
+          } catch (err) {
+            console.error('保存に失敗:', err);
+            this.el['form-error'].textContent = err.message || '保存中にエラーが発生しました';
+            this.el['form-error'].hidden = false;
           } finally {
             this.el['modal-save-btn'].disabled = false;
           }
@@ -1690,11 +1707,9 @@
               const root = document.querySelector(`.multiselect[data-category="${cat}"]`);
               if (!root) return;
 
-              // クリック処理を 1 ハンドラに統合し、必ず stopPropagation で document まで伝播させない。
-              // 伝播させると、render() で DOM が差し替わった後の e.target が detached になり、
-              // 後段の「外クリックで閉じる」ハンドラが closest() で null を返して誤って close() を呼ぶ
+              // クリック処理を 1 ハンドラに統合。外クリック検出は App.bindEvents 側で
+              // mousedown ベースに変更したため stopPropagation は不要
               root.addEventListener('click', (e) => {
-                e.stopPropagation();
                 const removeBtn = e.target.closest('.multiselect-chip-remove');
                 if (removeBtn) {
                   this.removeValue(cat, removeBtn.dataset.value);
@@ -1768,12 +1783,13 @@
               });
             });
 
-            // 外クリックで開いている multiselect をすべて閉じる
-            // （multiselect 内のクリックは上の stopPropagation でここに来ない）
-            document.addEventListener('click', () => {
-              this.CATEGORIES.forEach(cat => {
-                if (this._ui[cat]?.open) this.close(cat);
-              });
+            // 外クリック検出は App.bindEvents に集約
+          },
+
+          // 開いている multiselect をすべて閉じる（App 側の document ハンドラから呼ばれる）
+          closeAll() {
+            this.CATEGORIES.forEach(cat => {
+              if (this._ui[cat]?.open) this.close(cat);
             });
           },
         },
@@ -1819,7 +1835,12 @@
             const canvas = document.createElement('canvas');
             canvas.width = width;
             canvas.height = height;
-            canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              bitmap.close();
+              throw new Error('Canvas 2D コンテキストが取得できませんでした（メモリ不足の可能性）');
+            }
+            ctx.drawImage(bitmap, 0, 0, width, height);
             bitmap.close();
             return canvas.toDataURL('image/jpeg', this.JPEG_QUALITY);
           },
@@ -1852,9 +1873,11 @@
             this.render();
           },
 
-          // modalSave 時に呼ばれる。pending を IDB に書き、draft.photos に入れる [{ id }] を返す
+          // modalSave 時に呼ばれる。pending を IDB に書き、draft.photos に入れる [{ id }] を返す。
+          // 1 枚でも失敗があれば throw して呼び出し側に伝える（中途半端な保存を防ぐため）
           async commitToDraft() {
             const refs = [];
+            const failures = [];
             const now = Date.now();
             for (const p of this._pending) {
               try {
@@ -1862,7 +1885,11 @@
                 refs.push({ id: p.id });
               } catch (err) {
                 console.error('写真の IDB 保存に失敗:', err);
+                failures.push(p.id);
               }
+            }
+            if (failures.length > 0) {
+              throw new Error(`写真 ${failures.length} 枚の保存に失敗しました`);
             }
             return refs;
           },
@@ -1953,8 +1980,12 @@
             container.innerHTML = `
               <img class="photo-viewer-image" src="${App.escape(current.dataURL)}" alt="" />
               ${total > 1 ? `
-                <button class="photo-viewer-arrow photo-viewer-arrow-prev" type="button" aria-label="前の写真">‹</button>
-                <button class="photo-viewer-arrow photo-viewer-arrow-next" type="button" aria-label="次の写真">›</button>
+                <button class="photo-viewer-arrow photo-viewer-arrow-prev" type="button" aria-label="前の写真">
+                  <i class="ti ti-chevron-left" aria-hidden="true"></i>
+                </button>
+                <button class="photo-viewer-arrow photo-viewer-arrow-next" type="button" aria-label="次の写真">
+                  <i class="ti ti-chevron-right" aria-hidden="true"></i>
+                </button>
                 <div class="photo-viewer-counter">${this._index + 1} / ${total}</div>
               ` : ''}
             `;
@@ -1982,17 +2013,17 @@
               if (e.target.closest('.photo-viewer-arrow-prev')) this.prev();
               else if (e.target.closest('.photo-viewer-arrow-next')) this.next();
             });
+            // document.keydown は App.bindEvents に集約
+          },
 
-            // 矢印キーで切替（input/textarea にフォーカスがあるときは無視）
-            document.addEventListener('keydown', (e) => {
-              if (this._photos.length <= 1) return;
-              const a = document.activeElement;
-              if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) return;
-              // モーダルが開いているときは無効化
-              if (!App.el['modal-backdrop'].hidden) return;
-              if (e.key === 'ArrowLeft') { e.preventDefault(); this.prev(); }
-              else if (e.key === 'ArrowRight') { e.preventDefault(); this.next(); }
-            });
+          // App 側の document keydown ハンドラから呼ばれる
+          handleArrowKey(e) {
+            if (this._photos.length <= 1) return;
+            const a = document.activeElement;
+            if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) return;
+            if (!App.el['modal-backdrop'].hidden) return;
+            if (e.key === 'ArrowLeft') { e.preventDefault(); this.prev(); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); this.next(); }
           },
         },
 
