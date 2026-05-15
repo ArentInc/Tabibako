@@ -575,6 +575,8 @@
       color: var(--color-pin-selected);
       text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
     }
+    /* 宿泊所ピン（緑系で訪問場所と区別） */
+    .tabibako-pin-accommodation .ti { color: var(--color-text-success); }
 
     /* ===== 地図ピックモード ===== */
     body.pick-mode #map { cursor: crosshair; }
@@ -1091,16 +1093,24 @@
           <div class="place-list" id="place-list"></div>
         </div>
         <div class="modal-field">
+          <label class="modal-label">宿泊所</label>
+          <div class="search-area">
+            <input type="text" id="accommodation-search" placeholder="住所・地名で検索（例: 東横イン）" autocomplete="off" />
+            <div class="search-result-list" id="accommodation-search-results" hidden></div>
+          </div>
+          <button class="btn-sm" id="accommodation-pick-btn" type="button" style="margin-top:6px; align-self:flex-start;">
+            <i class="ti ti-map-pin-plus" style="font-size:13px" aria-hidden="true"></i>
+            地図から選ぶ
+          </button>
+          <div class="place-list" id="accommodation-selected"></div>
+        </div>
+        <div class="modal-field">
           <label class="modal-label">移動手段</label>
           <div class="multiselect" data-category="transport"></div>
         </div>
         <div class="modal-field">
           <label class="modal-label">同行者</label>
           <div class="multiselect" data-category="companions"></div>
-        </div>
-        <div class="modal-field">
-          <label class="modal-label" for="trip-accommodation">宿泊所</label>
-          <input type="text" id="trip-accommodation" placeholder="例: ABC ホテル" maxlength="100" />
         </div>
         <div class="modal-field">
           <label class="modal-label">タグ</label>
@@ -1169,6 +1179,7 @@
           draft: null,                       // モーダルで編集中の旅行データ
           modalActive: false,                // モーダル open 中は true（ピン抑制フラグ）
           pickMode: false,                   // 地図クリックで場所追加モード
+          pickTarget: 'place',               // 'place' | 'accommodation'
           selectedTripId: null,              // 左パネルで選択中の旅行 ID（null = 未選択）
           editingTripId: null,               // モーダルが編集モードのとき、対象 trip の ID
           editingOriginalPhotoIds: [],       // 編集前の写真 ID 一覧（削除判定に使用）
@@ -1176,11 +1187,13 @@
         _preModalSelectedId: null,           // モーダル open 直前の selectedTripId を保持
         map: null,
         draftMarkers: [],
+        draftAccommodationMarker: null,
         allTripMarkers: [],
         el: {},
         _lastApiRequestAt: 0,
         _throttleChain: Promise.resolve(),
         _searchRequestId: 0,
+        _accommodationSearchRequestId: 0,
 
         async init() {
           this.cacheElements();
@@ -1211,8 +1224,9 @@
             'modal-backdrop', 'modal-close-btn', 'modal-cancel-btn', 'modal-save-btn',
             'modal-title',
             'trip-name', 'trip-start', 'trip-end',
-            'trip-accommodation', 'trip-memo',
+            'trip-memo',
             'place-search', 'search-results', 'place-list', 'map-pick-btn',
+            'accommodation-search', 'accommodation-search-results', 'accommodation-selected', 'accommodation-pick-btn',
             'form-error',
             'photo-upload-area', 'photo-upload-input', 'photo-upload-list', 'photo-upload-progress',
           ];
@@ -1224,7 +1238,8 @@
           this.el['modal-close-btn'].addEventListener('click', () => this.modalClose());
           this.el['modal-cancel-btn'].addEventListener('click', () => this.modalClose());
           this.el['modal-save-btn'].addEventListener('click', () => this.modalSave());
-          this.el['map-pick-btn'].addEventListener('click', () => this.setPickMode(true));
+          this.el['map-pick-btn'].addEventListener('click', () => this.setPickMode(true, 'place'));
+          this.el['accommodation-pick-btn'].addEventListener('click', () => this.setPickMode(true, 'accommodation'));
           this.el['edit-btn'].addEventListener('click', () => {
             if (this.state.selectedTripId) this.modalOpen(this.state.selectedTripId);
           });
@@ -1268,6 +1283,25 @@
             }
           }, SEARCH_DEBOUNCE_MS);
           this.el['place-search'].addEventListener('input', debouncedSearch);
+
+          // 宿泊所検索（debounce + IME 対応）
+          let accommodationSearchComposing = false;
+          this.el['accommodation-search'].addEventListener('compositionstart', () => { accommodationSearchComposing = true; });
+          this.el['accommodation-search'].addEventListener('compositionend', () => {
+            accommodationSearchComposing = false;
+            debouncedAccommodationSearch();
+          });
+          const debouncedAccommodationSearch = this.debounce(() => {
+            if (accommodationSearchComposing) return;
+            const q = this.el['accommodation-search'].value.trim();
+            if (q) {
+              this.searchAccommodation(q);
+            } else {
+              this._accommodationSearchRequestId++;
+              this.renderAccommodationSearchResults(null);
+            }
+          }, SEARCH_DEBOUNCE_MS);
+          this.el['accommodation-search'].addEventListener('input', debouncedAccommodationSearch);
 
           // Document レベルのキーボードハンドラ集約
           document.addEventListener('keydown', (e) => {
@@ -1319,6 +1353,7 @@
         async onMapClick(e) {
           if (!this.state.pickMode) return;
           const { lat, lng } = e.latlng;
+          const target = this.state.pickTarget;
           this.setPickMode(false);
 
           let name = '';
@@ -1327,11 +1362,16 @@
           } catch (err) {
             console.warn('逆引きに失敗しました', err);
           }
-          this.addPlaceToDraft({
+          const placeObj = {
             name: name || `(${lat.toFixed(4)}, ${lng.toFixed(4)})`,
             lat,
             lng,
-          });
+          };
+          if (target === 'accommodation') {
+            this.setDraftAccommodation(placeObj);
+          } else {
+            this.addPlaceToDraft(placeObj);
+          }
         },
 
         renderDraftPins() {
@@ -1344,6 +1384,18 @@
               .addTo(this.map);
             this.draftMarkers.push(marker);
           });
+
+          if (this.draftAccommodationMarker) {
+            this.map.removeLayer(this.draftAccommodationMarker);
+            this.draftAccommodationMarker = null;
+          }
+          const acc = this.state.draft?.accommodation;
+          if (acc && acc.lat != null && acc.lng != null) {
+            this.draftAccommodationMarker = L.marker([acc.lat, acc.lng], { icon: this.createAccommodationPinIcon() })
+              .bindPopup(this.escape(acc.name))
+              .addTo(this.map);
+          }
+
           this.renderPinCount();
         },
 
@@ -1379,12 +1431,22 @@
                 .addTo(this.map);
               this.allTripMarkers.push(marker);
             });
+
+            if (trip.id === selectedId) {
+              const acc = trip.accommodation;
+              if (acc && acc.lat != null && acc.lng != null) {
+                const marker = L.marker([acc.lat, acc.lng], { icon: this.createAccommodationPinIcon() })
+                  .bindPopup(`宿泊所：${this.escape(acc.name)}`)
+                  .addTo(this.map);
+                this.allTripMarkers.push(marker);
+              }
+            }
           });
 
           this.renderPinCount();
         },
 
-        // 地図に表示されているピン数を反映。
+        // 地図に表示されているピン数を反映。draft + draft 宿泊所 + 全旅行表示の合算。
         // ヒートマップ ON 時はピン非表示のため pin-count バッジ自体を隠す
         renderPinCount() {
           const pinCountEl = this.el['pin-count'];
@@ -1393,8 +1455,9 @@
             return;
           }
           pinCountEl.hidden = false;
+          const accCount = this.draftAccommodationMarker ? 1 : 0;
           this.el['pin-count-value'].textContent =
-            this.draftMarkers.length + this.allTripMarkers.length;
+            this.draftMarkers.length + accCount + this.allTripMarkers.length;
         },
 
         // Tabler Icon ベースのカスタムピン。標準マーカー画像の CDN/CORS 問題を回避し
@@ -1404,6 +1467,16 @@
           return L.divIcon({
             className: `tabibako-pin tabibako-pin-${variant}`,
             html: '<i class="ti ti-map-pin-filled" aria-hidden="true"></i>',
+            iconSize: [32, 32],
+            iconAnchor: [16, 30],
+            popupAnchor: [0, -28],
+          });
+        },
+
+        createAccommodationPinIcon() {
+          return L.divIcon({
+            className: 'tabibako-pin tabibako-pin-accommodation',
+            html: '<i class="ti ti-bed" aria-hidden="true"></i>',
             iconSize: [32, 32],
             iconAnchor: [16, 30],
             popupAnchor: [0, -28],
@@ -1487,9 +1560,11 @@
           this.el['trip-name'].value = draft.name || '';
           this.el['trip-start'].value = draft.startDate || '';
           this.el['trip-end'].value = draft.endDate || '';
-          this.el['trip-accommodation'].value = draft.accommodation || '';
           this.el['trip-memo'].value = draft.memo || '';
           this.el['place-search'].value = '';
+          this.el['accommodation-search'].value = '';
+          this.renderAccommodationSearchResults(null);
+          this.renderAccommodationSelected();
           this.el['form-error'].hidden = true;
           this.el['modal-title'].textContent = editing ? '旅行を編集' : '旅行を追加';
 
@@ -1549,7 +1624,6 @@
           draft.name = this.el['trip-name'].value.trim();
           draft.startDate = this.el['trip-start'].value;
           draft.endDate = this.el['trip-end'].value;
-          draft.accommodation = this.el['trip-accommodation'].value.trim();
           draft.memo = this.el['trip-memo'].value.trim();
           // transport / companions / tags は multiSelect が draft.* に直接書き込み済み
 
@@ -1614,7 +1688,7 @@
             endDate: '',
             places: [],
             regions: [],       // Sprint 5 で自動判定（国内=都道府県・海外=国名）
-            accommodation: '', // Sprint 4
+            accommodation: { name: '', lat: null, lng: null }, // Issue #7 で地図選択対応
             transport: [],     // Sprint 4
             companions: [],    // Sprint 4
             tags: [],          // Sprint 4
@@ -1647,6 +1721,12 @@
             Number.isFinite(p.lat) && Number.isFinite(p.lng) &&
             Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180
           );
+          // 宿泊所の座標も bounds に含める
+          const acc = trip.accommodation;
+          if (acc && Number.isFinite(acc.lat) && Number.isFinite(acc.lng) &&
+              Math.abs(acc.lat) <= 90 && Math.abs(acc.lng) <= 180) {
+            valid.push(acc);
+          }
           if (valid.length === 0) return;
           if (valid.length === 1) {
             this.map.setView([valid[0].lat, valid[0].lng], 12);
@@ -1717,8 +1797,9 @@
         },
 
         // ===== Pick Mode =====
-        setPickMode(on) {
+        setPickMode(on, target = 'place') {
           this.state.pickMode = on;
+          this.state.pickTarget = on ? target : 'place';
           document.body.classList.toggle('pick-mode', on);
           this.el['modal-backdrop'].classList.toggle('pick-mode', on);
         },
@@ -1743,6 +1824,95 @@
           this.renderDraftPins();
         },
 
+        // ===== Draft accommodation =====
+        setDraftAccommodation(place) {
+          if (!this.state.draft) return;
+          this.state.draft.accommodation = place;
+          this.el['accommodation-search'].value = '';
+          this.renderAccommodationSearchResults(null);
+          this.renderAccommodationSelected();
+          this.renderDraftPins();
+        },
+
+        clearDraftAccommodation() {
+          if (!this.state.draft) return;
+          this.state.draft.accommodation = { name: '', lat: null, lng: null };
+          this.renderAccommodationSelected();
+          this.renderDraftPins();
+        },
+
+        renderAccommodationSelected() {
+          const container = this.el['accommodation-selected'];
+          const acc = this.state.draft?.accommodation;
+          if (!acc || !acc.name) {
+            container.innerHTML = '';
+            return;
+          }
+          container.innerHTML = `
+            <div class="place-item">
+              <span class="place-item-name">${this.escape(acc.name)}</span>
+              <button class="place-item-remove" type="button" aria-label="削除">
+                <i class="ti ti-x" style="font-size:11px" aria-hidden="true"></i>
+              </button>
+            </div>
+          `;
+          container.querySelector('.place-item-remove').addEventListener('click', () => {
+            this.clearDraftAccommodation();
+          });
+        },
+
+        renderAccommodationSearchResults(items) {
+          const container = this.el['accommodation-search-results'];
+          if (items === null) {
+            container.hidden = true;
+            container.innerHTML = '';
+            return;
+          }
+          if (items === 'loading') {
+            container.hidden = false;
+            container.innerHTML = '<div class="search-result-loading">検索中…</div>';
+            return;
+          }
+          if (items.length === 0) {
+            container.hidden = false;
+            container.innerHTML = '<div class="search-result-empty">該当する場所が見つかりませんでした</div>';
+            return;
+          }
+          container.hidden = false;
+          container.innerHTML = items.map((item, i) => `
+            <div class="search-result-item" data-index="${i}">${this.escape(item.display_name)}</div>
+          `).join('');
+          container.querySelectorAll('.search-result-item').forEach((el, i) => {
+            el.addEventListener('click', () => {
+              const item = items[i];
+              this.setDraftAccommodation({
+                name: item.display_name,
+                lat: parseFloat(item.lat),
+                lng: parseFloat(item.lon),
+              });
+            });
+          });
+        },
+
+        async searchAccommodation(query) {
+          const myRequestId = ++this._accommodationSearchRequestId;
+          this.renderAccommodationSearchResults('loading');
+          await this._throttle();
+          if (myRequestId !== this._accommodationSearchRequestId) return;
+          try {
+            const url = `${NOMINATIM_BASE}/search?q=${encodeURIComponent(query)}&format=json&accept-language=ja&limit=5`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (myRequestId !== this._accommodationSearchRequestId) return;
+            this.renderAccommodationSearchResults(data);
+          } catch (err) {
+            if (myRequestId !== this._accommodationSearchRequestId) return;
+            console.warn('宿泊所検索に失敗しました', err);
+            this.renderAccommodationSearchResults([]);
+          }
+        },
+
         // ===== Storage =====
         storage: {
           load() {
@@ -1760,6 +1930,12 @@
                 }
                 App.recomputeRegions(trip);
                 delete trip.prefectures;
+                // マイグレーション：旧 string accommodation → 新 { name, lat, lng } オブジェクト
+                if (typeof trip.accommodation === 'string') {
+                  trip.accommodation = { name: trip.accommodation, lat: null, lng: null };
+                } else if (!trip.accommodation || typeof trip.accommodation !== 'object') {
+                  trip.accommodation = { name: '', lat: null, lng: null };
+                }
               }
             } catch (err) {
               console.error('localStorage の読み込みに失敗', err);
@@ -2984,6 +3160,17 @@
             `);
           }
 
+          // 宿泊所は訪問地の直下に配置（Issue #7 のモーダル UI 順と整合）
+          const accName = trip.accommodation?.name;
+          if (accName) {
+            sections.push(`
+              <div class="detail-section">
+                <div class="detail-section-label">宿泊所</div>
+                <div class="detail-section-value">${this.escape(accName)}</div>
+              </div>
+            `);
+          }
+
           if (trip.transport && trip.transport.length > 0) {
             sections.push(`
               <div class="detail-section">
@@ -2998,15 +3185,6 @@
               <div class="detail-section">
                 <div class="detail-section-label">同行者</div>
                 <div class="detail-tags">${trip.companions.map(v => `<span class="detail-tag detail-tag-companions">${this.escape(v)}</span>`).join('')}</div>
-              </div>
-            `);
-          }
-
-          if (trip.accommodation) {
-            sections.push(`
-              <div class="detail-section">
-                <div class="detail-section-label">宿泊所</div>
-                <div class="detail-section-value">${this.escape(trip.accommodation)}</div>
               </div>
             `);
           }
@@ -3228,7 +3406,7 @@
             id: 'sample-' + crypto.randomUUID(),
             name: s.name, startDate: s.startDate, endDate: s.endDate, places,
             regions: [...new Set(places.map(p => p.region).filter(Boolean))],
-            accommodation: '',
+            accommodation: { name: '', lat: null, lng: null },
             transport: s.transport || [], companions: s.companions || [], tags: s.tags || [],
             memo: '', photos: [],
           };
