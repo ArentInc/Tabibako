@@ -3853,6 +3853,67 @@
         console.log(`サンプル ${trips.length} 旅行を追加しました。ヒートマップボタンを押して確認できます。`);
       };
 
+      // window.devLoadSamplePhotos(): 既存サンプル旅行に Picsum 経由のランダム写真を添付。
+      //   - 写真なしの旅行のみ対象（既に photos がある旅行はスキップ）
+      //   - 各旅行に 1〜2 枚、trip.name + index を seed にした deterministic な画像
+      //   - fetch 失敗時は SVG プレースホルダーにフォールバック（オフライン環境）
+      window.devLoadSamplePhotos = async function () {
+        const trips = App.state.trips;
+        if (!trips.length) {
+          alert('サンプル旅行データがありません。先に devLoadSamples() を実行してください。');
+          return;
+        }
+        const fetchAsDataURL = async (seed) => {
+          const url = `https://picsum.photos/seed/${encodeURIComponent(seed)}/800/600`;
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(blob);
+          });
+        };
+        const svgFallback = (label) => {
+          const palette = ['#4A90E2', '#7B68EE', '#FF6B6B', '#FFA500', '#9B59B6', '#1ABC9C'];
+          const color = palette[Math.abs(label.length) % palette.length];
+          const safe = label.replace(/[<>&]/g, '');
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect fill="${color}" width="800" height="600"/><text x="50%" y="50%" font-size="48" fill="white" text-anchor="middle" dy=".3em" font-family="sans-serif">${safe}</text></svg>`;
+          return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+        };
+        let added = 0;
+        let fellback = 0;
+        for (const trip of trips) {
+          if (Array.isArray(trip.photos) && trip.photos.length > 0) continue;
+          const count = 1 + Math.floor(Math.random() * 2);
+          const refs = [];
+          for (let i = 0; i < count; i++) {
+            const seed = `${trip.name}-${i}`;
+            let dataURL;
+            try {
+              dataURL = await fetchAsDataURL(seed);
+            } catch (e) {
+              console.warn(`Picsum 取得失敗（${seed}）→ SVG フォールバック:`, e.message || e);
+              dataURL = svgFallback(`${trip.name} ${i + 1}`);
+              fellback++;
+            }
+            const id = crypto.randomUUID();
+            try {
+              await App.photoDB.put({ id, dataURL, createdAt: Date.now() });
+              refs.push({ id });
+              added++;
+            } catch (e) {
+              console.error('IDB 書き込み失敗:', e);
+            }
+          }
+          trip.photos = refs;
+        }
+        App.storage.save();
+        App.renderTripList();
+        console.log(`写真添付完了：${added} 枚（うち ${fellback} 枚は SVG フォールバック）。リロード後も保持されます。`);
+      };
+
       window.devClearAll = async function () {
         if (!confirm('すべてのデータ（旅行・値プール・写真・絞り込み/ソート状態）を消去します。よろしいですか？')) return;
         // 各モジュールの定数から集約。キー追加時の更新漏れを防ぐ
@@ -3862,6 +3923,8 @@
           App.filter.STORAGE_KEY,
           App.sort.STORAGE_KEY,
           App.heatmap.STORAGE_KEY,
+          App.periodFilter.STORAGE_KEY,
+          App.panelResize.STORAGE_KEY,
         ];
         keys.forEach(k => localStorage.removeItem(k));
         try {
