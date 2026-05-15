@@ -83,6 +83,13 @@
     .resize-handle.dragging {
       background: var(--color-border-info);
     }
+    /* キーボードフォーカス時のリング（既存トークン --color-border-info を流用） */
+    .resize-handle:focus { outline: none; }
+    .resize-handle:focus-visible {
+      outline: 2px solid var(--color-border-info);
+      outline-offset: -1px;
+      background: var(--color-border-info);
+    }
     /* ドラッグ中は画面全体のカーソルとテキスト選択を抑止 */
     body.resizing {
       cursor: col-resize !important;
@@ -536,6 +543,9 @@
 
     /* ===== 旅行カード（左パネル）===== */
     .trip-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
       padding: 10px;
       margin-bottom: 6px;
       border: 0.5px solid var(--color-border-tertiary);
@@ -555,6 +565,21 @@
     .trip-card:focus-visible {
       outline: 2px solid var(--color-border-info);
       outline-offset: 1px;
+    }
+    /* カード内コンテンツ列（名前・メタ・タグ）。flex 子の overflow（横スクロールタグ）を許容するため min-width: 0 */
+    .trip-card-body {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    /* Issue #9: 1 枚目の写真サムネ。写真なし時は要素自体を描画しないので領域も確保しない */
+    .trip-card-thumb {
+      flex: 0 0 auto;
+      width: 60px;
+      height: 60px;
+      object-fit: cover;
+      border-radius: var(--border-radius-md);
+      background: var(--color-background-secondary);
+      display: block;
     }
     .trip-card-name {
       font-size: 13px;
@@ -1070,7 +1095,10 @@
 
     <!-- 左パネル幅リサイズハンドル -->
     <div class="resize-handle" data-side="left" role="separator" aria-orientation="vertical"
-         aria-label="左パネル幅を変更（ダブルクリックで初期値）" title="ドラッグで幅を変更（ダブルクリックで初期値）"></div>
+         tabindex="0"
+         aria-valuemin="240" aria-valuemax="384" aria-valuenow="384"
+         aria-label="左パネル幅を変更（矢印キーで調整・Home/End で最小/最大・Enter/Space で初期値）"
+         title="ドラッグまたは矢印キーで幅を変更（ダブルクリック / Enter で初期値）"></div>
 
     <!-- 中央パネル：地図 -->
     <main class="center" aria-label="地図">
@@ -1093,7 +1121,10 @@
 
     <!-- 右パネル幅リサイズハンドル -->
     <div class="resize-handle" data-side="right" role="separator" aria-orientation="vertical"
-         aria-label="右パネル幅を変更（ダブルクリックで初期値）" title="ドラッグで幅を変更（ダブルクリックで初期値）"></div>
+         tabindex="0"
+         aria-valuemin="280" aria-valuemax="390" aria-valuenow="390"
+         aria-label="右パネル幅を変更（矢印キーで調整・Home/End で最小/最大・Enter/Space で初期値）"
+         title="ドラッグまたは矢印キーで幅を変更（ダブルクリック / Enter で初期値）"></div>
 
     <!-- 右パネル：旅行詳細 -->
     <aside class="right" aria-label="旅行詳細">
@@ -1468,24 +1499,39 @@
         // フィルター済み全旅行のピンを地図に表示（Issue #5 の方針）。
         // - 未選択時：全件を default 青で表示
         // - 選択時：選択旅行を selected オレンジ、他旅行を dim グレー青で表示
-        // - ヒートマップ ON 時：俯瞰モード優先で全ピン非表示
+        // - ヒートマップ ON 時（Issue #12）：
+        //   - 未選択：全ピン非表示（ヒートマップ俯瞰のみ）
+        //   - 選択中：選択旅行のピン（selected バリアント + 宿泊所）のみ表示。
+        //     他旅行のピンは非表示（ヒートマップで代替）
         // - モーダル open 中（modalActive=true）：draft ピンに集中するため全ピン非表示
         renderAllTripPins() {
           this.allTripMarkers.forEach(m => this.map.removeLayer(m));
           this.allTripMarkers = [];
 
-          if (this.state.modalActive || this.heatmap.isEnabled()) {
+          if (this.state.modalActive) {
+            this.renderPinCount();
+            return;
+          }
+
+          const heatmapOn = this.heatmap.isEnabled();
+          const selectedId = this.state.selectedTripId;
+
+          // ヒートマップ ON かつ未選択：俯瞰モード優先で全ピン非表示
+          if (heatmapOn && selectedId === null) {
             this.renderPinCount();
             return;
           }
 
           const trips = this.periodFilter.apply(this.filter.apply(this.state.trips));
-          const selectedId = this.state.selectedTripId;
 
           trips.forEach(trip => {
+            const isSelected = trip.id === selectedId;
+            // ヒートマップ ON 時は選択旅行のピンのみを表示する
+            if (heatmapOn && !isSelected) return;
+
             let variant;
             if (selectedId === null) variant = 'default';
-            else if (trip.id === selectedId) variant = 'selected';
+            else if (isSelected) variant = 'selected';
             else variant = 'dim';
 
             (trip.places || []).forEach(p => {
@@ -1498,7 +1544,7 @@
               this.allTripMarkers.push(marker);
             });
 
-            if (trip.id === selectedId) {
+            if (isSelected) {
               const acc = trip.accommodation;
               if (acc && acc.lat != null && acc.lng != null) {
                 const marker = L.marker([acc.lat, acc.lng], { icon: this.createAccommodationPinIcon() })
@@ -1513,17 +1559,21 @@
         },
 
         // 地図に表示されているピン数を反映。draft + draft 宿泊所 + 全旅行表示の合算。
-        // ヒートマップ ON 時はピン非表示のため pin-count バッジ自体を隠す
+        // ヒートマップ ON 時：未選択ならピンが 0 個になるためバッジを隠し、
+        // 選択中は選択旅行のピン数を表示する（Issue #12）
         renderPinCount() {
           const pinCountEl = this.el['pin-count'];
-          if (this.heatmap.isEnabled()) {
+          const total = this.draftMarkers.length
+            + (this.draftAccommodationMarker ? 1 : 0)
+            + this.allTripMarkers.length;
+          // ヒートマップ ON 且つピン 0 個（未選択・選択中の旅行が places なし、等）
+          // の場合のみバッジを隠す。ヒートマップ OFF 時は従来通り「0 か所」も表示する
+          if (this.heatmap.isEnabled() && total === 0) {
             pinCountEl.hidden = true;
             return;
           }
           pinCountEl.hidden = false;
-          const accCount = this.draftAccommodationMarker ? 1 : 0;
-          this.el['pin-count-value'].textContent =
-            this.draftMarkers.length + accCount + this.allTripMarkers.length;
+          this.el['pin-count-value'].textContent = total;
         },
 
         // Tabler Icon ベースのカスタムピン。標準マーカー画像の CDN/CORS 問題を回避し
@@ -1777,9 +1827,9 @@
 
         // 選択中の旅行の全 places が画面内に収まるよう地図ビューを調整。
         // 選択解除（selectedTripId が null）になったときは何もしない（現在のビューを保持）。
-        // ヒートマップ ON 時は俯瞰モード優先で何もしない
+        // Issue #12：ヒートマップ ON 時も発火する。選択は明示的アクションなので
+        // 俯瞰よりも選択フィードバックを優先する（解除すれば俯瞰モードに戻る）
         fitMapToSelectedTrip() {
-          if (this.heatmap.isEnabled()) return;
           const trip = this.getSelectedTrip();
           if (!trip) return;
           // 不正座標（NaN・範囲外）を除外してから判定
@@ -3125,6 +3175,65 @@
                 if (App.map) App.map.invalidateSize();
               });
             }
+            // ARIA 値を現在幅・現在のウィンドウ可動域に合わせて同期
+            this._updateAriaRange();
+          },
+
+          // 該当 side の最大幅（中央地図 MIN_CENTER と反対側パネルを差し引いた可動上限）
+          _maxFor(side) {
+            const usable = Math.max(0, window.innerWidth - (this.HANDLE_WIDTH * 2));
+            if (side === 'left') {
+              return Math.max(this.MIN_LEFT, usable - this.MIN_CENTER - this._right);
+            }
+            return Math.max(this.MIN_RIGHT, usable - this.MIN_CENTER - this._left);
+          },
+
+          // 両 separator の aria-valuemin / aria-valuemax / aria-valuenow を更新
+          _updateAriaRange() {
+            const leftHandle = document.querySelector('.resize-handle[data-side="left"]');
+            const rightHandle = document.querySelector('.resize-handle[data-side="right"]');
+            if (leftHandle) {
+              leftHandle.setAttribute('aria-valuemin', String(this.MIN_LEFT));
+              leftHandle.setAttribute('aria-valuemax', String(Math.round(this._maxFor('left'))));
+              leftHandle.setAttribute('aria-valuenow', String(Math.round(this._left)));
+            }
+            if (rightHandle) {
+              rightHandle.setAttribute('aria-valuemin', String(this.MIN_RIGHT));
+              rightHandle.setAttribute('aria-valuemax', String(Math.round(this._maxFor('right'))));
+              rightHandle.setAttribute('aria-valuenow', String(Math.round(this._right)));
+            }
+          },
+
+          // キーボード操作：side の handle を deltaPx だけ「右方向に動かしたとき」と等価に幅を変える。
+          // _calcWidths と同じ deltaX 規約を採用：
+          //   左 handle：deltaX 正 → 左パネル拡大（→ キーで拡大）
+          //   右 handle：deltaX 正 → 右パネル縮小（→ キーで縮小）
+          nudge(side, deltaPx) {
+            // _calcWidths は drag 用に _dragStartLeft/Right を見るので、ここでは現在値を一時セットして再利用
+            this._dragStartLeft = this._left;
+            this._dragStartRight = this._right;
+            const [newLeft, newRight] = this._calcWidths(side, deltaPx);
+            const changed = (newLeft !== this._left) || (newRight !== this._right);
+            this._left = newLeft;
+            this._right = newRight;
+            this.applyWidths();
+            if (changed) this.save();
+          },
+
+          // キーボード操作：side のパネルを最小・最大幅にスナップ
+          snapToMin(side) {
+            if (side === 'left') this._left = this.MIN_LEFT;
+            else this._right = this.MIN_RIGHT;
+            this._clampToWindow();
+            this.applyWidths();
+            this.save();
+          },
+          snapToMax(side) {
+            if (side === 'left') this._left = this._maxFor('left');
+            else this._right = this._maxFor('right');
+            this._clampToWindow();
+            this.applyWidths();
+            this.save();
           },
 
           // 新しい左右幅を計算（最小幅・中央地図最小幅で clamp）
@@ -3205,6 +3314,43 @@
                 if (side === 'left' || side === 'right') this.startDrag(side, e);
               });
               handle.addEventListener('dblclick', () => this.resetWidths());
+              // キーボード操作：矢印 / Shift+矢印 / Home / End / Enter / Space
+              handle.addEventListener('keydown', (e) => {
+                const side = handle.dataset.side;
+                if (side !== 'left' && side !== 'right') return;
+                const step = e.shiftKey ? 50 : 10;
+                // nudge は drag と同じ deltaX 規約。矢印キーの方向をそのまま渡せば
+                // 左 handle：←で左パネル縮小／→で拡大、右 handle：←で右パネル拡大／→で縮小、となる
+                switch (e.key) {
+                  case 'ArrowLeft':
+                    e.preventDefault();
+                    e.stopPropagation(); // photoViewer.handleArrowKey 等への伝播抑止
+                    this.nudge(side, -step);
+                    break;
+                  case 'ArrowRight':
+                    e.preventDefault();
+                    e.stopPropagation(); // photoViewer.handleArrowKey 等への伝播抑止
+                    this.nudge(side, step);
+                    break;
+                  case 'Home':
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.snapToMin(side);
+                    break;
+                  case 'End':
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.snapToMax(side);
+                    break;
+                  case 'Enter':
+                  case ' ':
+                  case 'Spacebar': // 古い Edge 互換
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.resetWidths();
+                    break;
+                }
+              });
             });
             // ウィンドウサイズ変更時に幅を再正規化（小ウィンドウへ移行した際に破綻させない）
             window.addEventListener('resize', () => {
@@ -3215,7 +3361,9 @@
         },
 
         // ===== ヒートマップ（Leaflet.heat 経由）=====
-        // ON 時：フィルタ適用後の全旅行の places をヒートマップ表示。選択中のピンは隠す
+        // ON 時：フィルタ適用後の全旅行の places をヒートマップ表示。
+        // 未選択時は全ピン非表示で俯瞰のみ。選択中は選択旅行のピン（selected バリアント）
+        // と宿泊所ピンのみを重ねて表示し、fitMapToSelectedTrip も発火する（Issue #12）
         heatmap: {
           STORAGE_KEY: 'tabibako_heatmap',
           _enabled: false,
@@ -3263,7 +3411,9 @@
             this._enabled = !this._enabled;
             this.save();
             this.render();
-            App.renderAllTripPins();    // ON 時は個別ピンを隠すため再描画
+            // ON/OFF どちらでもピン表示条件が変わるため再描画
+            // （ON 時：選択中なら選択旅行のピンのみ、未選択なら全ピン非表示）
+            App.renderAllTripPins();
             App.updateHeatmapButton();
           },
 
@@ -3279,6 +3429,11 @@
 
         // ===== Rendering =====
         renderTripList() {
+          // サムネ非同期ロードの世代管理：renderTripList が連続呼ばれた際、
+          // 古い loadTripCardThumbnails の IDB 取得結果が新しい DOM（旧描画の
+          // detached img）に書き込まれるのを防ぐためのカウンタ
+          this._thumbGeneration = (this._thumbGeneration || 0) + 1;
+          const generation = this._thumbGeneration;
           // 絞り込み UI を最新の値プールで再描画
           this.filter.render();
           // 期間絞り込みボタンの active 状態を同期（ドロップダウン非表示時も反映するため）
@@ -3329,24 +3484,60 @@
             if (placeCount === 0) geographyText = '訪問場所なし';
             else if (regions.length === 0) geographyText = '訪問地域未判定';
             else geographyText = regions.join('・');
+            // Issue #9: 1 枚目の写真があればサムネ要素を描画（src は後段で async に差し込む）
+            const firstPhotoId = trip.photos && trip.photos[0] ? trip.photos[0].id : null;
+            const thumbHtml = firstPhotoId
+              ? `<img class="trip-card-thumb" data-photo-id="${this.escape(firstPhotoId)}" alt="">`
+              : '';
             return `
             <div class="trip-card${isSelected ? ' selected' : ''}" data-trip-id="${this.escape(trip.id)}"
                  role="button" tabindex="0" aria-pressed="${isSelected ? 'true' : 'false'}">
-              <div class="trip-card-name">${this.escape(trip.name)}</div>
-              <div class="trip-card-meta">
-                <div class="trip-card-meta-row">
-                  <i class="ti ti-calendar" style="font-size:11px" aria-hidden="true"></i>
-                  <span>${this.escape(trip.startDate)} 〜 ${this.escape(trip.endDate)}</span>
+              <div class="trip-card-body">
+                <div class="trip-card-name">${this.escape(trip.name)}</div>
+                <div class="trip-card-meta">
+                  <div class="trip-card-meta-row">
+                    <i class="ti ti-calendar" style="font-size:11px" aria-hidden="true"></i>
+                    <span>${this.escape(trip.startDate)} 〜 ${this.escape(trip.endDate)}</span>
+                  </div>
+                  <div class="trip-card-meta-row">
+                    <i class="ti ti-map-pin" style="font-size:11px" aria-hidden="true"></i>
+                    <span>${this.escape(geographyText)}</span>
+                  </div>
                 </div>
-                <div class="trip-card-meta-row">
-                  <i class="ti ti-map-pin" style="font-size:11px" aria-hidden="true"></i>
-                  <span>${this.escape(geographyText)}</span>
-                </div>
+                ${tagsHtml}
               </div>
-              ${tagsHtml}
+              ${thumbHtml}
             </div>
           `;
           }).join('');
+          // サムネ画像を IndexedDB から非同期で取得して src に差し込む
+          this.loadTripCardThumbnails(generation);
+        },
+
+        // 各 trip-card 内のサムネ <img> に対し、photoDB から dataURL を取得して src を設定する。
+        // 取得失敗時はサムネ要素を取り除き、領域も確保しない（写真なしと同等の見た目に倒す）。
+        // generation は呼び出し元 renderTripList が払い出した世代番号。
+        // await の間に renderTripList が再実行されると this._thumbGeneration が
+        // 進むため、その時点で中止して detached DOM への書き込みを防ぐ。
+        async loadTripCardThumbnails(generation) {
+          const thumbs = this.el['trip-list'].querySelectorAll('.trip-card-thumb[data-photo-id]');
+          for (const img of thumbs) {
+            const id = img.dataset.photoId;
+            if (!id) continue;
+            try {
+              const photo = await this.photoDB.get(id);
+              if (this._thumbGeneration !== generation) return;
+              if (photo && photo.dataURL) {
+                img.src = photo.dataURL;
+              } else {
+                img.remove();
+              }
+            } catch (err) {
+              if (this._thumbGeneration !== generation) return;
+              console.error('カードサムネの取得に失敗', err);
+              img.remove();
+            }
+          }
         },
 
         // 右パネル詳細：選択中の旅行の情報を描画。空のセクションは非表示
