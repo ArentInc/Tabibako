@@ -3065,6 +3065,11 @@
 
         // ===== Rendering =====
         renderTripList() {
+          // サムネ非同期ロードの世代管理：renderTripList が連続呼ばれた際、
+          // 古い loadTripCardThumbnails の IDB 取得結果が新しい DOM（旧描画の
+          // detached img）に書き込まれるのを防ぐためのカウンタ
+          this._thumbGeneration = (this._thumbGeneration || 0) + 1;
+          const generation = this._thumbGeneration;
           // 絞り込み UI を最新の値プールで再描画
           this.filter.render();
           // 順序：heatmap → pins。heatmap.toggle と同じ順序にすることで
@@ -3139,24 +3144,29 @@
           `;
           }).join('');
           // サムネ画像を IndexedDB から非同期で取得して src に差し込む
-          this.loadTripCardThumbnails();
+          this.loadTripCardThumbnails(generation);
         },
 
         // 各 trip-card 内のサムネ <img> に対し、photoDB から dataURL を取得して src を設定する。
         // 取得失敗時はサムネ要素を取り除き、領域も確保しない（写真なしと同等の見た目に倒す）。
-        async loadTripCardThumbnails() {
+        // generation は呼び出し元 renderTripList が払い出した世代番号。
+        // await の間に renderTripList が再実行されると this._thumbGeneration が
+        // 進むため、その時点で中止して detached DOM への書き込みを防ぐ。
+        async loadTripCardThumbnails(generation) {
           const thumbs = this.el['trip-list'].querySelectorAll('.trip-card-thumb[data-photo-id]');
           for (const img of thumbs) {
             const id = img.dataset.photoId;
             if (!id) continue;
             try {
               const photo = await this.photoDB.get(id);
+              if (this._thumbGeneration !== generation) return;
               if (photo && photo.dataURL) {
                 img.src = photo.dataURL;
               } else {
                 img.remove();
               }
             } catch (err) {
+              if (this._thumbGeneration !== generation) return;
               console.error('カードサムネの取得に失敗', err);
               img.remove();
             }
