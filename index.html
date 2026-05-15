@@ -83,6 +83,13 @@
     .resize-handle.dragging {
       background: var(--color-border-info);
     }
+    /* キーボードフォーカス時のリング（既存トークン --color-border-info を流用） */
+    .resize-handle:focus { outline: none; }
+    .resize-handle:focus-visible {
+      outline: 2px solid var(--color-border-info);
+      outline-offset: -1px;
+      background: var(--color-border-info);
+    }
     /* ドラッグ中は画面全体のカーソルとテキスト選択を抑止 */
     body.resizing {
       cursor: col-resize !important;
@@ -1010,7 +1017,10 @@
 
     <!-- 左パネル幅リサイズハンドル -->
     <div class="resize-handle" data-side="left" role="separator" aria-orientation="vertical"
-         aria-label="左パネル幅を変更（ダブルクリックで初期値）" title="ドラッグで幅を変更（ダブルクリックで初期値）"></div>
+         tabindex="0"
+         aria-valuemin="240" aria-valuemax="384" aria-valuenow="384"
+         aria-label="左パネル幅を変更（矢印キーで調整・Home/End で最小/最大・Enter/Space で初期値）"
+         title="ドラッグまたは矢印キーで幅を変更（ダブルクリック / Enter で初期値）"></div>
 
     <!-- 中央パネル：地図 -->
     <main class="center" aria-label="地図">
@@ -1033,7 +1043,10 @@
 
     <!-- 右パネル幅リサイズハンドル -->
     <div class="resize-handle" data-side="right" role="separator" aria-orientation="vertical"
-         aria-label="右パネル幅を変更（ダブルクリックで初期値）" title="ドラッグで幅を変更（ダブルクリックで初期値）"></div>
+         tabindex="0"
+         aria-valuemin="280" aria-valuemax="390" aria-valuenow="390"
+         aria-label="右パネル幅を変更（矢印キーで調整・Home/End で最小/最大・Enter/Space で初期値）"
+         title="ドラッグまたは矢印キーで幅を変更（ダブルクリック / Enter で初期値）"></div>
 
     <!-- 右パネル：旅行詳細 -->
     <aside class="right" aria-label="旅行詳細">
@@ -2893,6 +2906,65 @@
                 if (App.map) App.map.invalidateSize();
               });
             }
+            // ARIA 値を現在幅・現在のウィンドウ可動域に合わせて同期
+            this._updateAriaRange();
+          },
+
+          // 該当 side の最大幅（中央地図 MIN_CENTER と反対側パネルを差し引いた可動上限）
+          _maxFor(side) {
+            const usable = Math.max(0, window.innerWidth - (this.HANDLE_WIDTH * 2));
+            if (side === 'left') {
+              return Math.max(this.MIN_LEFT, usable - this.MIN_CENTER - this._right);
+            }
+            return Math.max(this.MIN_RIGHT, usable - this.MIN_CENTER - this._left);
+          },
+
+          // 両 separator の aria-valuemin / aria-valuemax / aria-valuenow を更新
+          _updateAriaRange() {
+            const leftHandle = document.querySelector('.resize-handle[data-side="left"]');
+            const rightHandle = document.querySelector('.resize-handle[data-side="right"]');
+            if (leftHandle) {
+              leftHandle.setAttribute('aria-valuemin', String(this.MIN_LEFT));
+              leftHandle.setAttribute('aria-valuemax', String(Math.round(this._maxFor('left'))));
+              leftHandle.setAttribute('aria-valuenow', String(Math.round(this._left)));
+            }
+            if (rightHandle) {
+              rightHandle.setAttribute('aria-valuemin', String(this.MIN_RIGHT));
+              rightHandle.setAttribute('aria-valuemax', String(Math.round(this._maxFor('right'))));
+              rightHandle.setAttribute('aria-valuenow', String(Math.round(this._right)));
+            }
+          },
+
+          // キーボード操作：side の handle を deltaPx だけ「右方向に動かしたとき」と等価に幅を変える。
+          // _calcWidths と同じ deltaX 規約を採用：
+          //   左 handle：deltaX 正 → 左パネル拡大（→ キーで拡大）
+          //   右 handle：deltaX 正 → 右パネル縮小（→ キーで縮小）
+          nudge(side, deltaPx) {
+            // _calcWidths は drag 用に _dragStartLeft/Right を見るので、ここでは現在値を一時セットして再利用
+            this._dragStartLeft = this._left;
+            this._dragStartRight = this._right;
+            const [newLeft, newRight] = this._calcWidths(side, deltaPx);
+            const changed = (newLeft !== this._left) || (newRight !== this._right);
+            this._left = newLeft;
+            this._right = newRight;
+            this.applyWidths();
+            if (changed) this.save();
+          },
+
+          // キーボード操作：side のパネルを最小・最大幅にスナップ
+          snapToMin(side) {
+            if (side === 'left') this._left = this.MIN_LEFT;
+            else this._right = this.MIN_RIGHT;
+            this._clampToWindow();
+            this.applyWidths();
+            this.save();
+          },
+          snapToMax(side) {
+            if (side === 'left') this._left = this._maxFor('left');
+            else this._right = this._maxFor('right');
+            this._clampToWindow();
+            this.applyWidths();
+            this.save();
           },
 
           // 新しい左右幅を計算（最小幅・中央地図最小幅で clamp）
@@ -2973,6 +3045,43 @@
                 if (side === 'left' || side === 'right') this.startDrag(side, e);
               });
               handle.addEventListener('dblclick', () => this.resetWidths());
+              // キーボード操作：矢印 / Shift+矢印 / Home / End / Enter / Space
+              handle.addEventListener('keydown', (e) => {
+                const side = handle.dataset.side;
+                if (side !== 'left' && side !== 'right') return;
+                const step = e.shiftKey ? 50 : 10;
+                // nudge は drag と同じ deltaX 規約。矢印キーの方向をそのまま渡せば
+                // 左 handle：←で左パネル縮小／→で拡大、右 handle：←で右パネル拡大／→で縮小、となる
+                switch (e.key) {
+                  case 'ArrowLeft':
+                    e.preventDefault();
+                    e.stopPropagation(); // photoViewer.handleArrowKey 等への伝播抑止
+                    this.nudge(side, -step);
+                    break;
+                  case 'ArrowRight':
+                    e.preventDefault();
+                    e.stopPropagation(); // photoViewer.handleArrowKey 等への伝播抑止
+                    this.nudge(side, step);
+                    break;
+                  case 'Home':
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.snapToMin(side);
+                    break;
+                  case 'End':
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.snapToMax(side);
+                    break;
+                  case 'Enter':
+                  case ' ':
+                  case 'Spacebar': // 古い Edge 互換
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.resetWidths();
+                    break;
+                }
+              });
             });
             // ウィンドウサイズ変更時に幅を再正規化（小ウィンドウへ移行した際に破綻させない）
             window.addEventListener('resize', () => {
