@@ -584,6 +584,39 @@
 | `devClearAll` の localStorage キーをハードコード重複 | 各モジュールの定数を再定義 | 各モジュールの `STORAGE_KEY` / `POOL_KEYS` を参照する形に集約 |
 | `init` 末尾で `heatmap.render()` が二重実行 | `renderTripList` 内でも呼ばれているため | init 側の明示呼び出しを削除（コメントで意図明示） |
 
+### GitHub Issues #6 / #7 / #8 マージ（2026-05-15）
+
+GitHub Actions Claude にブランチ実装を依頼 → 第三者コードレビュー → 修正後マージの流れで処理。
+
+#### Issue #8：画面上部のピックモード案内バナー削除（マージ済み）
+- pick-mode-banner 要素・スタイル・参照を一括削除
+- ピックモード中の視覚フィードバックは body.pick-mode (cursor:crosshair) + modal-backdrop.pick-mode（右下縮小）で担保
+
+#### Issue #6：技術的負債整理（マージ済み + レビュー修正適用）
+- `renderSelectedTripPins` → `renderAllTripPins`、`selectedTripMarkers` → `allTripMarkers` にリネーム
+- `state.modalActive` フラグを新設（旧来は `state.draft` を抑制フラグに転用していた）
+- `renderPinCount`：ヒートマップ ON 時はバッジ自体を非表示に
+- ポップアップ文言に空文字フォールバック
+- **レビュー修正**：`.map-pin-count[hidden] { display: none }` を追加（display: flex が hidden 属性を打ち消していたバグ）
+
+#### Issue #7：宿泊所を地図から選択可能に（マージ済み + レビュー修正適用 + rebase）
+- 宿泊所フィールドを訪問地直下に移動（モーダル UI 順序）
+- 住所検索 + 「地図から選ぶ」UI を訪問地と同じパターンで実装
+- accommodation: string → { name, lat, lng } に拡張、storage.load で旧データ自動マイグレーション
+- 宿泊所ピンを ti-bed の緑系アイコンで表示
+- ピックモードに `pickTarget`（'place' | 'accommodation'）を追加、`onMapClick` で target に応じて分岐
+- `fitMapToSelectedTrip` に宿泊所座標も含める
+- **レビュー修正**：
+  - 右パネル詳細でも宿泊所セクションを訪問場所の直下に移動（モーダル UI 順と整合）
+  - setPickMode で `on=false` 時に pickTarget をデフォルトにリセット（target 取り違え防止）
+  - Issue #6 のリネーム / Issue #8 のバナー削除と整合させる rebase 対応
+
+#### 残課題（Sprint 7 候補）
+
+- 宿泊所検索 UI（searchAddress / renderSearchResults 等）が訪問地検索と約 100 行重複。`createSearchController` 風のファクトリで一本化推奨
+- 宿泊所ピンに variant（dim/selected）が無く、非選択時に他旅行の宿泊所が表示されない（Issue #5 の方針と乖離）
+- 逆引き失敗時の `(35.0000, 139.0000)` 文字列が宿泊所名に入る違和感
+
 ### Issue #3 対応：左右パネルのドラッグリサイズ（2026-05-14）
 
 機能追加：左右パネルの境界をドラッグして幅を変更可能に。
