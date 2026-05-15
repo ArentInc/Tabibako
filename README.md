@@ -78,9 +78,10 @@ devClearAll()
 | [`README.md`](./README.md) | 本ファイル。起動方法とサンプルデータ手順 |
 | [`CLAUDE.md`](./CLAUDE.md) | Claude Code 向けプロジェクト規約・アーキテクチャ・YAGNI 方針 |
 | [`SPRINT_LOG.md`](./SPRINT_LOG.md) | Sprint 1〜6 の実装内容・設計判断・残課題・レビュー指摘の履歴 |
-| [`指示書/tabibako_spec.md`](./指示書/tabibako_spec.md) | 仕様書（データ定義・機能一覧・ユーザーストーリー） |
-| [`指示書/tabibako_claude_code_prompt.md`](./指示書/tabibako_claude_code_prompt.md) | Claude Code 向け指示プロンプト原文 |
-| [`指示書/tabibako_mockup_v6.html`](./指示書/tabibako_mockup_v6.html) | UI モック（Sprint 1〜3 では「正」扱い、Sprint 4 以降は乖離が大きい参考資料） |
+| [`仕様書/実装後/tabibako_spec.md`](./仕様書/実装後/tabibako_spec.md) | 仕様書（実装後・現状反映版）。データ定義・機能一覧・ユーザーストーリー・追加実装の累積 |
+| [`仕様書/実装前/tabibako_spec.md`](./仕様書/実装前/tabibako_spec.md) | 仕様書（実装前・原本） |
+| [`仕様書/実装前/tabibako_claude_code_prompt.md`](./仕様書/実装前/tabibako_claude_code_prompt.md) | Claude Code 向け指示プロンプト原文 |
+| [`仕様書/実装前/tabibako_mockup_v6.html`](./仕様書/実装前/tabibako_mockup_v6.html) | UI モック（Sprint 1〜3 では「正」扱い、Sprint 4 以降は乖離が大きい参考資料） |
 
 ## アーキテクチャ概要
 

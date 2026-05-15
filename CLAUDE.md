@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Tabibako（旅箱）**：旅行を構造化データとして記録し、地図と写真で振り返るパーソナル旅行データベース。Anthropic 中途入社研修の自由課題として、Webアプリ開発未経験者がアジャイル的に「小さく動かしながら積み上げる」進め方で実装する。
 
-研修課題上の制約：「数ショットで終わるような課題は避け、仕様をしっかり言語化して AI にコードを書かせるアプローチを意識する」。仕様書は `指示書/tabibako_spec.md`、Claude Code 向け指示プロンプト原文は `指示書/tabibako_claude_code_prompt.md` にある。
+研修課題上の制約：「数ショットで終わるような課題は避け、仕様をしっかり言語化して AI にコードを書かせるアプローチを意識する」。実装後の現状仕様は `仕様書/実装後/tabibako_spec.md`、元の仕様書・指示プロンプト・モックは `仕様書/実装前/` 配下にある。
 
 ## アーキテクチャ
 
@@ -37,7 +37,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 開発ワークフロー
 
-このプロジェクトは Sprint 1〜6 のアジャイル方式で進める。各 Sprint の目標・タスク・完了条件は `指示書/tabibako_claude_code_prompt.md` に定義済み。
+このプロジェクトは Sprint 1〜6 のアジャイル方式で進める。各 Sprint の目標・タスク・完了条件は `仕様書/実装前/tabibako_claude_code_prompt.md` に定義済み。
 
 ### Sprint 進行時のルール
 
@@ -48,7 +48,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - 残課題（次 Sprint / 持ち越し）
    - 既知の留意点
 3. Sprint 完了時、試行錯誤中のコメントアウトや未使用コードは削除してからログを書く（コンテキスト汚染回避）。
-4. **モック v6（`指示書/tabibako_mockup_v6.html`）は参考扱い**。Sprint 4 以降はモック作成時点から仕様が乖離しているため、優先順位は SPRINT_LOG > 仕様書 > 過去議論 > モック の順。Sprint 完了時のモック整合性レビューは原則不要（Sprint 1〜3 までで実施済み）。
+4. **モック v6（`仕様書/実装前/tabibako_mockup_v6.html`）は参考扱い**。Sprint 4 以降はモック作成時点から仕様が乖離しているため、優先順位は SPRINT_LOG > 仕様書（実装後） > 過去議論 > モック の順。Sprint 完了時のモック整合性レビューは原則不要（Sprint 1〜3 までで実施済み）。
 
 ### 実装中の進捗管理
 
@@ -83,9 +83,10 @@ UI 変更時は実際にブラウザで開いてゴールデンパスと主要�
 判断に迷ったときの参照優先順位（2026-05-14 以降の運用）：
 
 1. **`SPRINT_LOG.md`（開発ログ）** — 過去の Sprint で確定した設計判断。最新の意思決定が最も信頼できる
-2. **`指示書/tabibako_spec.md`（仕様書）** — データ定義・機能一覧・ユーザーストーリー
-3. **`指示書/tabibako_claude_code_prompt.md`（指示プロンプト）** — Sprint 計画・実装方針
-4. **`指示書/tabibako_mockup_v6.html`（UI モック）** — Sprint 1〜3 では「正」扱いだったが、Sprint 4 以降は乖離が大きい **参考資料**
+2. **`仕様書/実装後/tabibako_spec.md`（仕様書・現状反映版）** — 実装に追従した現状仕様。データ定義・機能一覧・ユーザーストーリー・設計判断の累積
+3. **`仕様書/実装前/tabibako_spec.md`（仕様書・原本）** — 着手前の仕様書（履歴扱い）
+4. **`仕様書/実装前/tabibako_claude_code_prompt.md`（指示プロンプト）** — Sprint 計画・実装方針
+5. **`仕様書/実装前/tabibako_mockup_v6.html`（UI モック）** — Sprint 1〜3 では「正」扱いだったが、Sprint 4 以降は乖離が大きい **参考資料**
 
 ## 進め方の前提
 
