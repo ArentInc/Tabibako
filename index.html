@@ -1402,24 +1402,39 @@
         // フィルター済み全旅行のピンを地図に表示（Issue #5 の方針）。
         // - 未選択時：全件を default 青で表示
         // - 選択時：選択旅行を selected オレンジ、他旅行を dim グレー青で表示
-        // - ヒートマップ ON 時：俯瞰モード優先で全ピン非表示
+        // - ヒートマップ ON 時（Issue #12）：
+        //   - 未選択：全ピン非表示（ヒートマップ俯瞰のみ）
+        //   - 選択中：選択旅行のピン（selected バリアント + 宿泊所）のみ表示。
+        //     他旅行のピンは非表示（ヒートマップで代替）
         // - モーダル open 中（modalActive=true）：draft ピンに集中するため全ピン非表示
         renderAllTripPins() {
           this.allTripMarkers.forEach(m => this.map.removeLayer(m));
           this.allTripMarkers = [];
 
-          if (this.state.modalActive || this.heatmap.isEnabled()) {
+          if (this.state.modalActive) {
+            this.renderPinCount();
+            return;
+          }
+
+          const heatmapOn = this.heatmap.isEnabled();
+          const selectedId = this.state.selectedTripId;
+
+          // ヒートマップ ON かつ未選択：俯瞰モード優先で全ピン非表示
+          if (heatmapOn && selectedId === null) {
             this.renderPinCount();
             return;
           }
 
           const trips = this.filter.apply(this.state.trips);
-          const selectedId = this.state.selectedTripId;
 
           trips.forEach(trip => {
+            const isSelected = trip.id === selectedId;
+            // ヒートマップ ON 時は選択旅行のピンのみを表示する
+            if (heatmapOn && !isSelected) return;
+
             let variant;
             if (selectedId === null) variant = 'default';
-            else if (trip.id === selectedId) variant = 'selected';
+            else if (isSelected) variant = 'selected';
             else variant = 'dim';
 
             (trip.places || []).forEach(p => {
@@ -1432,7 +1447,7 @@
               this.allTripMarkers.push(marker);
             });
 
-            if (trip.id === selectedId) {
+            if (isSelected) {
               const acc = trip.accommodation;
               if (acc && acc.lat != null && acc.lng != null) {
                 const marker = L.marker([acc.lat, acc.lng], { icon: this.createAccommodationPinIcon() })
@@ -1447,17 +1462,21 @@
         },
 
         // 地図に表示されているピン数を反映。draft + draft 宿泊所 + 全旅行表示の合算。
-        // ヒートマップ ON 時はピン非表示のため pin-count バッジ自体を隠す
+        // ヒートマップ ON 時：未選択ならピンが 0 個になるためバッジを隠し、
+        // 選択中は選択旅行のピン数を表示する（Issue #12）
         renderPinCount() {
           const pinCountEl = this.el['pin-count'];
-          if (this.heatmap.isEnabled()) {
+          const total = this.draftMarkers.length
+            + (this.draftAccommodationMarker ? 1 : 0)
+            + this.allTripMarkers.length;
+          // ヒートマップ ON 且つピン 0 個（未選択・選択中の旅行が places なし、等）
+          // の場合のみバッジを隠す。ヒートマップ OFF 時は従来通り「0 か所」も表示する
+          if (this.heatmap.isEnabled() && total === 0) {
             pinCountEl.hidden = true;
             return;
           }
           pinCountEl.hidden = false;
-          const accCount = this.draftAccommodationMarker ? 1 : 0;
-          this.el['pin-count-value'].textContent =
-            this.draftMarkers.length + accCount + this.allTripMarkers.length;
+          this.el['pin-count-value'].textContent = total;
         },
 
         // Tabler Icon ベースのカスタムピン。標準マーカー画像の CDN/CORS 問題を回避し
@@ -1711,9 +1730,9 @@
 
         // 選択中の旅行の全 places が画面内に収まるよう地図ビューを調整。
         // 選択解除（selectedTripId が null）になったときは何もしない（現在のビューを保持）。
-        // ヒートマップ ON 時は俯瞰モード優先で何もしない
+        // Issue #12：ヒートマップ ON 時も発火する。選択は明示的アクションなので
+        // 俯瞰よりも選択フィードバックを優先する（解除すれば俯瞰モードに戻る）
         fitMapToSelectedTrip() {
-          if (this.heatmap.isEnabled()) return;
           const trip = this.getSelectedTrip();
           if (!trip) return;
           // 不正座標（NaN・範囲外）を除外してから判定
@@ -2983,7 +3002,9 @@
         },
 
         // ===== ヒートマップ（Leaflet.heat 経由）=====
-        // ON 時：フィルタ適用後の全旅行の places をヒートマップ表示。選択中のピンは隠す
+        // ON 時：フィルタ適用後の全旅行の places をヒートマップ表示。
+        // 未選択時は全ピン非表示で俯瞰のみ。選択中は選択旅行のピン（selected バリアント）
+        // と宿泊所ピンのみを重ねて表示し、fitMapToSelectedTrip も発火する（Issue #12）
         heatmap: {
           STORAGE_KEY: 'tabibako_heatmap',
           _enabled: false,
@@ -3031,7 +3052,9 @@
             this._enabled = !this._enabled;
             this.save();
             this.render();
-            App.renderAllTripPins();    // ON 時は個別ピンを隠すため再描画
+            // ON/OFF どちらでもピン表示条件が変わるため再描画
+            // （ON 時：選択中なら選択旅行のピンのみ、未選択なら全ピン非表示）
+            App.renderAllTripPins();
             App.updateHeatmapButton();
           },
 
