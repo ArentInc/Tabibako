@@ -2741,7 +2741,12 @@
             return arr;
           },
 
-          toggle() { this._open = !this._open; this.render(); },
+          toggle() {
+            // 同じ場所に表示される期間絞り込みドロップダウンを閉じる（排他制御）
+            App.periodFilter.close();
+            this._open = !this._open;
+            this.render();
+          },
           close()  { this._open = false; this.render(); },
 
           render() {
