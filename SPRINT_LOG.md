@@ -617,6 +617,104 @@ GitHub Actions Claude にブランチ実装を依頼 → 第三者コードレ�
 - 宿泊所ピンに variant（dim/selected）が無く、非選択時に他旅行の宿泊所が表示されない（Issue #5 の方針と乖離）
 - 逆引き失敗時の `(35.0000, 139.0000)` 文字列が宿泊所名に入る違和感
 
+### GitHub Issues #9 / #10 / #11 / #12 マージ（2026-05-15、Agent 並列開発試行）
+
+Claude Code のサブエージェント並列実行（`isolation: worktree`）を活用し、4 Issue を同時並列で実装・レビュー・修正・マージした。研修課題の特性を活かし「単一開発者でアジャイル小ロット並列」という新しい進め方を実証。
+
+#### 並列開発フロー（実証）
+
+```
+[実装フェーズ] 4 Agent を background spawn（isolation: worktree）
+  各 Agent が独立 worktree で実装 → commit → push → gh pr create
+  約 5 分で完了（逐次なら推定 20 分）
+
+[レビューフェーズ] 4 code-reviewer Agent を並列起動
+  各 PR の diff を gh pr diff 経由で取得し辛口レビュー
+  約 2 分で完了。3 件で致命的問題を検出（REQUEST CHANGES）
+
+[修正フェーズ] 3 修正 Agent を並列起動
+  既存 worktree で致命的修正のみ追加 commit + push
+  約 1.5 分で完了
+
+[マージフェーズ] 主 Claude が PR を順次マージ・conflict 解消
+  #15 → #13 → #14 → #16（衝突可能性が低い順）
+  conflict は 1 箇所のみ（renderAllTripPins の selectedId 重複宣言）
+  約 3 分で完了
+```
+
+**合計約 12 分**で 4 Issue 完遂。逐次なら 35〜40 分超の見込み。
+
+#### 得られた知見
+
+- **単一 `index.html` 構成でも 4 並列実装が成立**。git merge レベルの conflict は 1 箇所のみで、論理衝突なし
+- **仕様が荒い Issue には主 Claude が妥当なデフォルトを Agent に渡し、並行してユーザー仕様確認スレッドを立てる** 構成が機能。今回は 4 質問とも推奨デフォルトで合意し revise 不要
+- **code-reviewer Agent は実装 Agent と分離して第三者視点を維持**。致命的問題を 3/4 で検出（race condition / keyboard 競合 / 排他制御非対称）
+- **Agent Teams（`TeamCreate`）の使用は見送り**：エージェント間 SendMessage 通信が不要なケースは、シンプルな Agent 並列呼び出しで十分。Teams の価値は対話が必要なケース（実装役 ↔ レビュー役の往復等）に限定される
+- **`isolation: worktree` の信頼性**：4 Agent 同時起動で worktree 干渉ゼロ。`git worktree list` の表示は時として古い情報を出すが、`git branch --show-current` が真の状態を示す
+- **修正フェーズで既存 worktree を再利用** することで、新規 worktree 作成のコストを回避（branch のチェックアウト競合も避けられる）
+
+#### Issue #10：separator のキーボード操作対応 + ARIA 値属性（マージ済み + レビュー修正適用）
+
+- 左右 resize-handle に `tabindex="0"`、`aria-valuemin/max/now` 付与
+- キー操作：←→（10px）/ Shift+←→（50px）/ Home・End（min/max）/ Enter・Space（初期値リセット）
+- `App.panelResize` モジュールに `_maxFor` / `_updateAriaRange` / `nudge` / `snapToMin` / `snapToMax` メソッド追加
+- フォーカスリングは `--color-border-info` 流用、`outline-offset: -1px` でハンドル内収納
+- **レビュー修正**：resize-handle keydown で ArrowLeft/Right 等の認識キーに `e.stopPropagation()` を追加し、`photoViewer.handleArrowKey` との同時発火を解消（写真 2 枚以上 + モーダル非表示で再現する競合バグ）
+
+#### Issue #12：ヒートマップ ON 時の旅行選択 UX 改善（案 A、マージ済み）
+
+- ヒートマップ ON + 旅行選択時、選択中の旅行のピン（`createPinIcon('selected')`）のみ表示
+- `fitMapToSelectedTrip()` のヒートマップ ON 時早期 return を解除（fit 発火させて視覚フィードバック確保）
+- 非選択時のヒートマップ俯瞰モード（全ピン非表示）は維持
+- ピン数バッジ：ヒートマップ ON でも実ピン数 1+ なら表示、0 なら hidden。ヒートマップ OFF 時は従来通り「0 か所」も表示
+- `heatmap.toggle()` 時に `fitMapToSelectedTrip` を呼ばない設計は意図的（地図ビュー位置の維持）。OFF 直後に選択中旅行が画面外にあるケースは仕様割り切り
+
+#### Issue #9：旅行リストカードに 1 枚目の写真サムネを表示（マージ済み + レビュー修正適用）
+
+- trip-card を flex 化、右端に 60×60px 正方形サムネ、`object-fit: cover`
+- 角丸は既存トークン `--border-radius-md` を流用（`--radius-xs` 未定義のため、新規トークンを増やさず統一性を優先）
+- 写真なし時：要素自体を描画せず領域確保なし。ロード中のみ薄背景 placeholder
+- `loadTripCardThumbnails` で IDB から async 取得し src 差し込み
+- `.trip-card-body` に `min-width: 0` を付与してタグの `overflow-x: auto` 横スクロールを維持
+- **レビュー修正**：世代カウンタ `_thumbGeneration` を追加。`renderTripList` 連続実行時（フィルタ変更・ソート切替）の detached DOM 書き込みを防止
+
+#### Issue #11：旅行リストに期間絞り込み機能を追加（マージ済み + レビュー修正適用 + マージ統合）
+
+- ソートボタン左に「期間で絞り込み」ボタン、ドロップダウン UI（sort と同パターン、`ti-calendar-event` アイコン）
+- 開始日 / 終了日の `<input type="date">` + クリアボタン
+- 判定：重なり判定（trip 期間と filter 期間が交差すれば対象）。空欄は無制限
+- 適用順序：`filter` → `periodFilter` → `sort`（renderTripList / heatmap.getPoints / renderAllTripPins の 3 箇所）
+- localStorage キー：`tabibako_period_filter`、新規 `App.periodFilter` モジュール（`App.sort` パターンを踏襲）
+- 入力イベントは `change`（`input` だと連続入力中に render() でフォーカスが外れる）
+- **レビュー修正**：`App.sort.toggle()` 冒頭で `App.periodFilter.close()` を呼び排他制御を対称化。これにより両ドロップダウンの同時開放を防ぐ
+- **マージ時 conflict 解消**：`renderAllTripPins` 内の `const trips = ...` 行で、period-filter 側の `periodFilter.apply` 追加と origin/main 側の `selectedId` 早期宣言（Issue #12 経由）が衝突。両意図を統合（`periodFilter.apply` 残し、重複 `selectedId` 削除）
+
+#### 残課題（Sprint 7 候補・レビュー指摘の据え置き分）
+
+致命的でない改善推奨を次 Sprint 以降に持ち越し：
+
+**Issue #12 関連**
+- `renderAllTripPins` の variant 判定で `heatmap ON + 選択中` 時の `dim`/`default` 分岐は dead branch（早期 return で `isSelected==true` のみ残る）。コメント or ブロック化で意図明示
+- `renderPinCount` の `total` コメント「draft + 全旅行表示の合算」はモーダル中の `allTripMarkers === 0` ケースで誤読を生むため整理余地
+
+**Issue #9 関連**
+- `firstPhotoId` 抽出を `trip.photos?.[0]?.id ?? null` に optional chaining 化
+- プレースホルダー背景色（`--color-background-secondary` 流用）の設計意図をコメント化
+- 写真なし旅行と写真あり旅行のカード高さ差（現状は `align-items: flex-start` で許容）
+
+**Issue #10 関連**
+- `nudge()` の `_dragStartLeft/Right` 一時書き換えパターン → `_calcWidths` を純粋関数化するリファクタ
+- `_updateAriaRange()` の `document.querySelector` をキャッシュ化（高頻度パス）
+- `snapToMax()` の `_clampToWindow()` 重複呼び出し（no-op だが可読性のため整理）
+- `aria-valuetext="${px}px"` で単位読み上げ強化
+
+**Issue #11 関連**
+- `App.periodFilter.load()` の日付フォーマット regex 検証（`App.sort` の防御レベルと整合）
+- 空リストメッセージの出し分け（filter 経由 vs periodFilter 経由）
+- `_start > _end` 逆転入力時の UI 警告
+- `box-shadow: rgba(0,0,0,0.1)` ハードコード（他箇所散在のため `--shadow-dropdown` で一括トークン化）
+- `getCurrent()` 未使用 → 削除 or 公開意図を明示
+
 ### Issue #3 対応：左右パネルのドラッグリサイズ（2026-05-14）
 
 機能追加：左右パネルの境界をドラッグして幅を変更可能に。
@@ -687,8 +785,9 @@ GitHub Actions Claude にブランチ実装を依頼 → 第三者コードレ�
 - **Leaflet.heat の SRI ハッシュ**：将来 GitHub Pages 公開時の整合性のため付与検討
 - **localStorage キー集約**：複数モジュールに散らばっているキーをルート定数に集める
 - **`heatmap.render()` の呼び頻度**：`renderTripList` 都度ではなく差分更新で十分なケースが多い
-- **ヒートマップ ON 時 + 旅行選択時の UX**：現状「fit しない + 個別ピンも出ない」で挙動不明瞭。可視ハイライト追加余地
 - **devLoadSamples 配列の本体混在**：80 行のサンプル配列を別ブロックに切る or 別ファイル化（単一 HTML 方針との整合は要検討）
+
+※「ヒートマップ ON 時 + 旅行選択時の UX 改善」は Issue #12（2026-05-15）で対応済み
 
 ### Dev ヘルパ（コンソールから手動実行）
 
