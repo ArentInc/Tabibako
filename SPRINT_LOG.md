@@ -584,6 +584,53 @@
 | `devClearAll` の localStorage キーをハードコード重複 | 各モジュールの定数を再定義 | 各モジュールの `STORAGE_KEY` / `POOL_KEYS` を参照する形に集約 |
 | `init` 末尾で `heatmap.render()` が二重実行 | `renderTripList` 内でも呼ばれているため | init 側の明示呼び出しを削除（コメントで意図明示） |
 
+### Issue #3 対応：左右パネルのドラッグリサイズ（2026-05-14）
+
+機能追加：左右パネルの境界をドラッグして幅を変更可能に。
+
+#### 実装内容
+
+- `.app` の `grid-template-columns` を **5 列構造**に変更：`<left>px 4px 1fr 4px <right>px`
+- `.resize-handle[data-side="left|right"]` を 2 本配置（`role="separator"` + `aria-orientation="vertical"`）
+- **`App.panelResize`** モジュール
+  - `_left` / `_right` を内部状態として保持、`tabibako_panel_widths` に JSON で永続化
+  - `applyWidths()`：`grid-template-columns` を書き換え、`requestAnimationFrame` で `App.map.invalidateSize()` を間引き呼び出し
+  - `startDrag` → `onDragMove` → `endDrag` のフローで document に mousemove/mouseup リスナーを張る（要素外でも追従）
+  - 最小幅制限：左 240px / 右 280px / 中央 320px。中央の最小を割らないよう左右を巻き戻し
+  - **ダブルクリックで初期値（384/390）リセット**
+- `body.resizing` クラスで `cursor: col-resize !important` + `user-select: none` を画面全体に適用
+
+#### 設計上の決定事項
+
+| 決定 | 理由 |
+|------|------|
+| grid を 5 列構造に拡張 | ハンドルを grid アイテムとして配置することで `position: absolute` の煩雑さを回避 |
+| ハンドル幅 4px | 細すぎず誤クリックも起きにくいバランス |
+| `requestAnimationFrame` で invalidateSize 間引き | mousemove は秒間 60+ 回発火するが、地図再計算は描画フレームに 1 回で十分 |
+| 最小幅違反時は対辺を巻き戻す | 中央地図を維持するため、ドラッグ方向のパネルだけが拡大を諦める動作 |
+| タッチ対応はスコープ外 | CLAUDE.md の Chrome デスクトップ前提に従う |
+
+#### 残課題
+
+- タッチデバイス対応（必要が出てから検討）
+- リサイズ中の Nominatim popup 位置追従（マイナー）
+- aria-valuemin/valuemax/valuenow + キーボード矢印キーリサイズ（separator の完全 a11y。Sprint 7 候補）
+
+#### レビュー指摘と修正
+
+| 指摘 | 修正 |
+|------|------|
+| `startDrag` の二重起動でリスナーが残留するリスク | startDrag 冒頭で `_dragging` truthy なら `endDrag()` を先に呼ぶ防御を追加 |
+| ウィンドウ外で mouseup された場合に `body.resizing` が残る | `window.addEventListener('blur', endDrag)` をドラッグ中のみ張る。endDrag で確実に解除 |
+| 小ウィンドウで `MIN_LEFT + MIN_RIGHT + MIN_CENTER > usable` となり地図が 0px に潰れる | `_clampToWindow()` メソッドで段階的に縮小。中央地図最優先・左右は MIN まで縮められる |
+| `load()` の上限チェック欠落（巨大値や旧大画面値で破綻） | load 末尾で `_clampToWindow()` を呼ぶ |
+| ウィンドウリサイズ未追従 | `window.addEventListener('resize', ...)` で clamp + applyWidths |
+| DEFAULT_* と `_left`/`_right` の二重管理 | load 冒頭で `DEFAULT_*` で初期化してから localStorage 上書きする一元化 |
+
+### F-18（ズーム連動切替）について
+
+仕様書のオプション機能 F-18「ズーム連動でヒートマップ／ピン自動切替」は **不要として据え置き**。現状の手動トグルで十分との判断。実装ニーズが出てから検討。
+
 ### Issue #5 対応：非選択時の全旅行ピン表示（2026-05-14）
 
 仕様変更。Sprint 6 完了後の機能追加：

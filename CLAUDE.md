@@ -24,7 +24,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 色・余白・角丸は `index.html` 冒頭の `:root` で CSS 変数として定義（モック v6 ベース）。新規スタイルを書くときは既存トークンを再利用し、生の色コードを直書きしない。
 
-3カラム CSS Grid レイアウト：左 384px / 中央 1fr / 右 390px、高さ 100vh。**指示書原本は 256px / 260px だが、Sprint 1 レビューで「狭い」と判断し 1.5 倍に拡張**（SPRINT_LOG.md 参照）。トップバーは持たず、ヒートマップ切り替え・ピン数表示は地図上のオーバーレイで実装する。
+3カラム CSS Grid レイアウト：**初期値** 左 384px / 中央 1fr / 右 390px、高さ 100vh。**指示書原本は 256px / 260px だが、Sprint 1 レビューで「狭い」と判断し 1.5 倍に拡張**（SPRINT_LOG.md 参照）。Issue #3 で **左右パネルの境界をドラッグして幅変更可能** に拡張し、変更は `tabibako_panel_widths` に永続化される（ダブルクリックで初期値リセット）。トップバーは持たず、ヒートマップ切り替え・ピン数表示は地図上のオーバーレイで実装する。
 
 アイコンは Tabler Icons の webfont 版を `<i class="ti ti-xxx">` で使用。
 
