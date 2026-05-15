@@ -478,6 +478,62 @@
       width: 11px;
     }
 
+    /* ===== 期間絞り込みドロップダウン ===== */
+    /* sort-dropdown と同じ位置基準（right: 10px / top: 100%）。
+       sort と同時に開いた場合でも互いに重ならないよう、両方の close を相互に呼ぶ運用 */
+    .period-filter-dropdown {
+      position: absolute;
+      top: 100%;
+      right: 10px;
+      margin-top: 4px;
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: var(--border-radius-md);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      z-index: 30;
+      min-width: 220px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .period-filter-dropdown[hidden] { display: none; }
+    .period-filter-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .period-filter-label {
+      font-size: 11px;
+      color: var(--color-text-secondary);
+      font-weight: 500;
+    }
+    .period-filter-input {
+      font-size: 12px;
+      padding: 4px 6px;
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: var(--border-radius-md);
+      background: var(--color-background-primary);
+      color: var(--color-text-primary);
+      font-family: inherit;
+    }
+    .period-filter-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 2px;
+    }
+    .period-filter-clear {
+      font-size: 11px;
+      padding: 4px 10px;
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: var(--border-radius-md);
+      background: transparent;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .period-filter-clear:hover { background: var(--color-background-secondary); }
+
     /* ===== 旅行カード（左パネル）===== */
     .trip-card {
       padding: 10px;
@@ -989,6 +1045,9 @@
     <aside class="left" aria-label="旅行一覧">
       <div class="left-toolbar">
         <span class="left-toolbar-title">Tabibako</span>
+        <button class="icon-btn" id="period-filter-btn" type="button" title="期間で絞り込み" aria-label="期間で絞り込み" aria-haspopup="true" aria-expanded="false">
+          <i class="ti ti-calendar-event" style="font-size:14px" aria-hidden="true"></i>
+        </button>
         <button class="icon-btn" id="sort-btn" type="button" title="ソート" aria-label="ソート" aria-haspopup="true" aria-expanded="false">
           <i class="ti ti-arrows-sort" style="font-size:14px" aria-hidden="true"></i>
         </button>
@@ -996,6 +1055,7 @@
           <i class="ti ti-plus" style="font-size:14px" aria-hidden="true"></i>
         </button>
         <div class="sort-dropdown" id="sort-dropdown" role="menu" hidden></div>
+        <div class="period-filter-dropdown" id="period-filter-dropdown" role="dialog" aria-label="期間で絞り込み" hidden></div>
       </div>
 
       <div class="filter-section" id="filter-section" hidden></div>
@@ -1199,6 +1259,7 @@
           this.cacheElements();
           this.storage.load();
           this.filter.load();
+          this.periodFilter.load();
           this.heatmap.init();
           // パネル幅は mapInit より前に load + applyWidths（map が正しいサイズで初期化される）
           this.panelResize.load();
@@ -1208,6 +1269,7 @@
           this.photoViewer.bindEvents();
           this.sort.bindEvents();
           this.filter.bindEvents();
+          this.periodFilter.bindEvents();
           this.heatmap.bindEvents();
           this.panelResize.bindEvents();
           this.mapInit();
@@ -1221,6 +1283,7 @@
             'add-btn', 'trip-list', 'pin-count', 'pin-count-value', 'detail-body', 'photo-viewer',
             'edit-btn', 'delete-btn', 'heatmap-btn',
             'sort-btn', 'sort-dropdown', 'filter-section',
+            'period-filter-btn', 'period-filter-dropdown',
             'modal-backdrop', 'modal-close-btn', 'modal-cancel-btn', 'modal-save-btn',
             'modal-title',
             'trip-name', 'trip-start', 'trip-end',
@@ -1324,6 +1387,9 @@
             if (!e.target.closest('#sort-dropdown') && !e.target.closest('#sort-btn')) {
               this.sort.close();
             }
+            if (!e.target.closest('#period-filter-dropdown') && !e.target.closest('#period-filter-btn')) {
+              this.periodFilter.close();
+            }
           });
 
           // 背景クリックで閉じる（ピックモード中は無効）
@@ -1413,7 +1479,7 @@
             return;
           }
 
-          const trips = this.filter.apply(this.state.trips);
+          const trips = this.periodFilter.apply(this.filter.apply(this.state.trips));
           const selectedId = this.state.selectedTripId;
 
           trips.forEach(trip => {
@@ -2712,6 +2778,167 @@
           },
         },
 
+        // ===== 期間絞り込み（左パネル旅行一覧）=====
+        // Issue #11。開始日〜終了日を指定して、trip 期間と重なる旅行のみリスト・地図に表示する。
+        // App.filter（マルチセレクト）とは独立に動き、AND で合成される。
+        periodFilter: {
+          STORAGE_KEY: 'tabibako_period_filter',
+          _start: '',    // 'YYYY-MM-DD' or ''
+          _end: '',
+          _open: false,
+          _eventsBound: false,
+
+          load() {
+            this._start = '';
+            this._end = '';
+            try {
+              const raw = localStorage.getItem(this.STORAGE_KEY);
+              if (raw) {
+                const data = JSON.parse(raw);
+                if (typeof data.start === 'string') this._start = data.start;
+                if (typeof data.end === 'string') this._end = data.end;
+              }
+            } catch (err) {
+              console.error('期間絞り込み状態の読み込み失敗', err);
+            }
+          },
+
+          save() {
+            try {
+              localStorage.setItem(this.STORAGE_KEY, JSON.stringify({
+                start: this._start,
+                end: this._end,
+              }));
+            } catch (err) {
+              console.error('期間絞り込み状態の保存失敗', err);
+            }
+          },
+
+          getCurrent() {
+            return { start: this._start, end: this._end };
+          },
+
+          // 両方空欄なら絞り込みなし扱い
+          isEmpty() {
+            return this._start === '' && this._end === '';
+          },
+
+          setCurrent(start, end) {
+            this._start = typeof start === 'string' ? start : '';
+            this._end = typeof end === 'string' ? end : '';
+            this.save();
+          },
+
+          clear() {
+            this.setCurrent('', '');
+          },
+
+          // trip の期間（startDate〜endDate）とフィルタ期間が重なる旅行のみ残す。
+          // 空欄側は無制限として扱う。trip 側に日付が欠けている場合は除外しない（YAGNI、現状の入力 UI で必須）
+          apply(trips) {
+            if (this.isEmpty()) return trips;
+            const fs = this._start;
+            const fe = this._end;
+            return trips.filter(trip => {
+              const ts = trip.startDate || '';
+              const te = trip.endDate || ts;
+              if (fs && te && te < fs) return false;
+              if (fe && ts && ts > fe) return false;
+              return true;
+            });
+          },
+
+          toggle() {
+            if (this._open) { this.close(); return; }
+            // 同じ場所に表示されるソートドロップダウンを閉じる
+            App.sort.close();
+            this._open = true;
+            this.render();
+          },
+          close() {
+            if (!this._open) {
+              // 閉じている状態でも active 表現を更新する必要があるため render は呼ぶ
+              this._open = false;
+              this._updateButtonActive();
+              return;
+            }
+            this._open = false;
+            this.render();
+          },
+
+          _updateButtonActive() {
+            const btn = App.el['period-filter-btn'];
+            if (!btn) return;
+            btn.classList.toggle('active', !this.isEmpty());
+            btn.setAttribute('aria-expanded', String(this._open));
+          },
+
+          render() {
+            const dropdown = App.el['period-filter-dropdown'];
+            const btn = App.el['period-filter-btn'];
+            if (!dropdown || !btn) return;
+            this._updateButtonActive();
+            if (!this._open) {
+              dropdown.hidden = true;
+              dropdown.innerHTML = '';
+              return;
+            }
+            dropdown.innerHTML = `
+              <div class="period-filter-field">
+                <label class="period-filter-label" for="period-filter-start">開始日</label>
+                <input class="period-filter-input" type="date" id="period-filter-start" value="${App.escape(this._start)}" />
+              </div>
+              <div class="period-filter-field">
+                <label class="period-filter-label" for="period-filter-end">終了日</label>
+                <input class="period-filter-input" type="date" id="period-filter-end" value="${App.escape(this._end)}" />
+              </div>
+              <div class="period-filter-actions">
+                <button class="period-filter-clear" type="button" id="period-filter-clear-btn">クリア</button>
+              </div>
+            `;
+            dropdown.hidden = false;
+          },
+
+          bindEvents() {
+            if (this._eventsBound) return;
+            this._eventsBound = true;
+            const btn = App.el['period-filter-btn'];
+            const dropdown = App.el['period-filter-dropdown'];
+            if (!btn || !dropdown) return;
+            btn.addEventListener('click', () => this.toggle());
+
+            // 入力変更で即時に絞り込み反映。render() で innerHTML を作り直すと
+            // 編集中の date input がフォーカスを失うため、change イベントのみで反映する
+            dropdown.addEventListener('change', (e) => {
+              if (!(e.target instanceof HTMLInputElement)) return;
+              if (e.target.id === 'period-filter-start') {
+                this._start = e.target.value || '';
+                this.save();
+                this._updateButtonActive();
+                App.renderTripList();
+              } else if (e.target.id === 'period-filter-end') {
+                this._end = e.target.value || '';
+                this.save();
+                this._updateButtonActive();
+                App.renderTripList();
+              }
+            });
+
+            dropdown.addEventListener('click', (e) => {
+              if (e.target.closest('#period-filter-clear-btn')) {
+                this.clear();
+                // 入力欄を即時クリアして見た目を同期。dropdown は開いたまま残す
+                const startEl = document.getElementById('period-filter-start');
+                const endEl = document.getElementById('period-filter-end');
+                if (startEl) startEl.value = '';
+                if (endEl) endEl.value = '';
+                this._updateButtonActive();
+                App.renderTripList();
+              }
+            });
+          },
+        },
+
         // ===== 写真ビューア（右パネル上部）=====
         // 選択中の旅行の写真を 1 枚ずつ表示。矢印 / キーボードで切替
         photoViewer: {
@@ -3003,7 +3230,7 @@
 
           // フィルタ適用後の全旅行の places を [lat, lng] に展開
           getPoints() {
-            const trips = App.filter.apply(App.state.trips);
+            const trips = App.periodFilter.apply(App.filter.apply(App.state.trips));
             return trips.flatMap(t => (t.places || []).map(p => [p.lat, p.lng]));
           },
 
@@ -3049,6 +3276,8 @@
         renderTripList() {
           // 絞り込み UI を最新の値プールで再描画
           this.filter.render();
+          // 期間絞り込みボタンの active 状態を同期（ドロップダウン非表示時も反映するため）
+          this.periodFilter._updateButtonActive();
           // 順序：heatmap → pins。heatmap.toggle と同じ順序にすることで
           // レイヤー切替時の見た目不整合を防ぐ
           this.heatmap.render();
@@ -3064,8 +3293,9 @@
             `;
             return;
           }
-          // 絞り込み → ソートの順で適用（元配列は変更しない）
+          // 絞り込み（マルチセレクト → 期間）→ ソートの順で適用（元配列は変更しない）
           let trips = this.filter.apply(this.state.trips);
+          trips = this.periodFilter.apply(trips);
           trips = this.sort.apply(trips);
           if (trips.length === 0) {
             container.innerHTML = `
