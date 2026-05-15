@@ -167,6 +167,8 @@
       align-items: center;
       gap: 4px;
     }
+    /* Issue #6 レビュー修正：display: flex が hidden 属性を打ち消すのを防ぐ */
+    .map-pin-count[hidden] { display: none; }
     .map-heatmap-btn {
       position: absolute;
       top: 10px;
