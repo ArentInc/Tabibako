@@ -68,7 +68,7 @@
 |------|------|------|
 | 左パネル「Tabibako」横のアイコンが空欄表示 | Tabler Icons webfont の CDN パスが誤り。`@tabler/icons-webfont@3.5.0` ではアセットが `dist/` 配下に置かれており、旧パス `tabler-icons.min.css` は 404 になっていた | `href` を `dist/tabler-icons.min.css` に修正 |
 | ズーム +/− ボタンがピン数バッジ「○か所」と重なる | Leaflet 既定の `zoomControl` 位置は `topleft`。`zoomControl: true` のままでは仕様（右下配置）と一致しない。CSS 側に `.leaflet-bottom.leaflet-right` のマージン調整はあったが、肝心の position 指定が抜けていた | `zoomControl: false` で標準コントロールを無効化し、`L.control.zoom({ position: 'bottomright' })` で右下に配置 |
-| 左右パネルが狭く、コンテンツが窮屈に見える | 指示書原本の `256px / 260px` は FHD ディスプレイ前提の値で、横長ディスプレイ（実機：DAIV S5 想定）では中央地図が広すぎ、左右が狭く感じる | 1.5 倍に拡張：左 `384px` / 右 `390px`。今後の Sprint で左パネルに絞り込み 3 セクション、右パネルに各プロパティ表示が乗ることを見越した先行調整 |
+| 左右パネルが狭く、コンテンツが窮屈に見える | 指示書原本の `256px / 260px` では横長ディスプレイで中央地図が広すぎ、左右が狭く感じる | 1.5 倍に拡張：左 `384px` / 右 `390px`。今後の Sprint で左パネルに絞り込み 3 セクション、右パネルに各プロパティ表示が乗ることを見越した先行調整 |
 | 地図 `<div>` の `role="application"` + `aria-label="OpenStreetMap"` が ARIA アンチパターン | `role="application"` はスクリーンリーダーを「フォーカスモード」に強制切り替えし、ブラウズモードのナビゲーション（矢印キー・見出しジャンプ等）を全停止させる。Leaflet 自身が標準的な `<a role="button">` で a11y を提供しているため不要。さらに親 `<main aria-label="地図">` と `aria-label` が二重指定で読み上げが矛盾していた | `<div id="map">` から `role` と `aria-label` を両方削除。親 `<main>` のランドマークと Leaflet 内部の a11y に任せる |
 | `.photo-viewer` の背景・文字色が CLAUDE.md 方針違反（生色コード `#c9d9e8` / `#8ab` を直書き） | 既存トークン（`--color-background-info` 等）と意味的にも色味的にも合致しないため、生コードを書かざるを得なかった状況 | プレースホルダー専用トークン `--color-background-photo-placeholder` / `--color-text-photo-placeholder` を `:root` に新設して参照。Sprint 4 で写真ビューア本実装する際、プレースホルダー処理と一緒にこのトークンの去就を再検討する |
 
