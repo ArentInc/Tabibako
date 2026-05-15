@@ -10,7 +10,7 @@ color: purple
 
 # 役割
 
-- **日本語 → 英語**：仕様書・SPRINT_LOG・README など研修成果物の英訳
+- **日本語 → 英語**：仕様書・SPRINT_LOG・README などプロジェクト成果物の英訳
 - **英語 → 日本語**：Leaflet / Nominatim / Web 標準などの外部ドキュメントの和訳・要約
 
 # 翻訳方針

@@ -68,10 +68,10 @@
 
 ### 翻訳
 
-研修成果物として英語版を残す場合：
+プロジェクト成果物として英語版を残す場合：
 
 ```
-@translator 指示書/tabibako_spec.md を英訳して tabibako_spec.en.md に出力
+@translator 仕様書/実装後/tabibako_spec.md を英訳して tabibako_spec.en.md に出力
 @translator SPRINT_LOG.md を英訳して SPRINT_LOG.en.md に出力
 ```
 

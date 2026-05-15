@@ -4,10 +4,9 @@
 
 ## このプロジェクトについて（背景）
 
-これはAnthropicへの中途入社研修の自由課題として作成するWebアプリです。
-研修の指示内容は以下の通りです：
+これは個人学習用のWebアプリ自由課題として作成するプロジェクトです。
+自分に課した進め方の方針は以下：
 
-> - Anthropic Skilljar の無料講座（Claude 101 / Claude Code 101 / Introduction to Claude Cowork / Claude Code in Action / Introduction to agent skills / Introduction to subagents / AI Capabilities and Limitations）を修了済み
 > - 自分が作りたいサービスを設定し、企画書・仕様書を作成した上でClaude Codeを活用して実装すること
 > - 数ショットで終わるような課題は避け、仕様をしっかり言語化して「AIにコードを書かせる」アプローチを意識すること
 
@@ -315,7 +314,7 @@ claude  # Claude Code を起動
 ```
 
 **4. Claude Code の初期設定**
-- 初回起動時に Anthropic アカウントでの認証を行う
+- 初回起動時にアカウント認証を行う
 - プロジェクトフォルダ内で起動することで、そのフォルダが作業ディレクトリになる
 
 **5. 動作確認**
