@@ -1165,6 +1165,7 @@
         state: {
           trips: [],
           draft: null,                       // モーダルで編集中の旅行データ
+          modalActive: false,                // モーダル open 中は true（ピン抑制フラグ）
           pickMode: false,                   // 地図クリックで場所追加モード
           selectedTripId: null,              // 左パネルで選択中の旅行 ID（null = 未選択）
           editingTripId: null,               // モーダルが編集モードのとき、対象 trip の ID
@@ -1173,7 +1174,7 @@
         _preModalSelectedId: null,           // モーダル open 直前の selectedTripId を保持
         map: null,
         draftMarkers: [],
-        selectedTripMarkers: [],
+        allTripMarkers: [],
         el: {},
         _lastApiRequestAt: 0,
         _throttleChain: Promise.resolve(),
@@ -1202,7 +1203,7 @@
 
         cacheElements() {
           const ids = [
-            'add-btn', 'trip-list', 'pin-count-value', 'detail-body', 'photo-viewer',
+            'add-btn', 'trip-list', 'pin-count', 'pin-count-value', 'detail-body', 'photo-viewer',
             'edit-btn', 'delete-btn', 'heatmap-btn',
             'sort-btn', 'sort-dropdown', 'filter-section',
             'modal-backdrop', 'modal-close-btn', 'modal-cancel-btn', 'modal-save-btn',
@@ -1348,12 +1349,12 @@
         // - 未選択時：全件を default 青で表示
         // - 選択時：選択旅行を selected オレンジ、他旅行を dim グレー青で表示
         // - ヒートマップ ON 時：俯瞰モード優先で全ピン非表示
-        // - モーダル open 中（draft あり）：draft ピンに集中するため全ピン非表示
-        renderSelectedTripPins() {
-          this.selectedTripMarkers.forEach(m => this.map.removeLayer(m));
-          this.selectedTripMarkers = [];
+        // - モーダル open 中（modalActive=true）：draft ピンに集中するため全ピン非表示
+        renderAllTripPins() {
+          this.allTripMarkers.forEach(m => this.map.removeLayer(m));
+          this.allTripMarkers = [];
 
-          if (this.state.draft || this.heatmap.isEnabled()) {
+          if (this.state.modalActive || this.heatmap.isEnabled()) {
             this.renderPinCount();
             return;
           }
@@ -1368,21 +1369,30 @@
             else variant = 'dim';
 
             (trip.places || []).forEach(p => {
-              const popupContent = `${this.escape(trip.name)}：${this.escape(p.name)}`;
+              const tripName = trip.name || '名称未設定';
+              const placeName = p.name || '名称なし';
+              const popupContent = `${this.escape(tripName)}：${this.escape(placeName)}`;
               const marker = L.marker([p.lat, p.lng], { icon: this.createPinIcon(variant) })
                 .bindPopup(popupContent)
                 .addTo(this.map);
-              this.selectedTripMarkers.push(marker);
+              this.allTripMarkers.push(marker);
             });
           });
 
           this.renderPinCount();
         },
 
-        // 地図に表示されているピン数を反映。draft + 選択中の旅行を合算
+        // 地図に表示されているピン数を反映。
+        // ヒートマップ ON 時はピン非表示のため pin-count バッジ自体を隠す
         renderPinCount() {
+          const pinCountEl = this.el['pin-count'];
+          if (this.heatmap.isEnabled()) {
+            pinCountEl.hidden = true;
+            return;
+          }
+          pinCountEl.hidden = false;
           this.el['pin-count-value'].textContent =
-            this.draftMarkers.length + this.selectedTripMarkers.length;
+            this.draftMarkers.length + this.allTripMarkers.length;
         },
 
         // Tabler Icon ベースのカスタムピン。標準マーカー画像の CDN/CORS 問題を回避し
@@ -1454,8 +1464,9 @@
           // モーダル open 前の selectedTripId を保持（modalClose で復元）
           this._preModalSelectedId = this.state.selectedTripId;
 
-          // draft / editing state を先にセット。これにより renderSelectedTripPins の
-          // state.draft 分岐で全ピン表示が抑制される（draft pins だけが地図に出る）
+          // draft / editing state を先にセット。
+          // modalActive=true により renderAllTripPins が全ピン表示を抑制する（draft pins だけが地図に出る）
+          this.state.modalActive = true;
           this.state.draft = editing
             ? JSON.parse(JSON.stringify(existing))
             : this.createBlankTrip();
@@ -1480,8 +1491,8 @@
           this.el['form-error'].hidden = true;
           this.el['modal-title'].textContent = editing ? '旅行を編集' : '旅行を追加';
 
-          // UI 再描画。renderTripList 内で renderSelectedTripPins が呼ばれるが
-          // state.draft が truthy なので全ピン表示は抑制される
+          // UI 再描画。renderTripList 内で renderAllTripPins が呼ばれるが
+          // state.modalActive=true のため全ピン表示は抑制される
           this.renderTripList();
           this.renderSearchResults(null);
           this.renderPlaceList();
@@ -1505,6 +1516,7 @@
         modalClose() {
           this.setPickMode(false);
           this.el['modal-backdrop'].hidden = true;
+          this.state.modalActive = false;
           this.state.draft = null;
           this.state.editingTripId = null;
           this.state.editingOriginalPhotoIds = [];
@@ -1524,7 +1536,7 @@
             this.renderTripDetail();
             this.photoViewer.clear();
           }
-          // 全ピン表示を復元（state.draft null）。selectedTripId 復元の有無に関わらず必要
+          // 全ピン表示を復元（modalActive=false）。selectedTripId 復元の有無に関わらず必要
           this.renderTripList();
           this.updateActionButtons();
         },
@@ -1613,7 +1625,7 @@
         // 同じ ID をもう一度クリックで解除（toggle）
         selectTrip(tripId) {
           this.state.selectedTripId = (this.state.selectedTripId === tripId) ? null : tripId;
-          // renderTripList が内部で renderSelectedTripPins を呼ぶので個別呼び出し不要
+          // renderTripList が内部で renderAllTripPins を呼ぶので個別呼び出し不要
           this.renderTripList();
           this.renderTripDetail();
           this.photoViewer.load(this.getSelectedTrip());
@@ -1690,7 +1702,7 @@
             catch (err) { console.warn('写真の削除に失敗:', photo.id, err); }
           }
 
-          // renderTripList が renderSelectedTripPins を含むので個別呼び出し不要
+          // renderTripList が renderAllTripPins を含むので個別呼び出し不要
           this.renderTripList();
           this.renderTripDetail();
           this.photoViewer.clear();
@@ -2841,7 +2853,7 @@
             this._enabled = !this._enabled;
             this.save();
             this.render();
-            App.renderSelectedTripPins();    // ON 時は個別ピンを隠すため再描画
+            App.renderAllTripPins();    // ON 時は個別ピンを隠すため再描画
             App.updateHeatmapButton();
           },
 
@@ -2862,7 +2874,7 @@
           // 順序：heatmap → pins。heatmap.toggle と同じ順序にすることで
           // レイヤー切替時の見た目不整合を防ぐ
           this.heatmap.render();
-          this.renderSelectedTripPins();
+          this.renderAllTripPins();
 
           const container = this.el['trip-list'];
           if (this.state.trips.length === 0) {
