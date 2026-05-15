@@ -480,6 +480,9 @@
 
     /* ===== 旅行カード（左パネル）===== */
     .trip-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
       padding: 10px;
       margin-bottom: 6px;
       border: 0.5px solid var(--color-border-tertiary);
@@ -499,6 +502,21 @@
     .trip-card:focus-visible {
       outline: 2px solid var(--color-border-info);
       outline-offset: 1px;
+    }
+    /* カード内コンテンツ列（名前・メタ・タグ）。flex 子の overflow（横スクロールタグ）を許容するため min-width: 0 */
+    .trip-card-body {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    /* Issue #9: 1 枚目の写真サムネ。写真なし時は要素自体を描画しないので領域も確保しない */
+    .trip-card-thumb {
+      flex: 0 0 auto;
+      width: 60px;
+      height: 60px;
+      object-fit: cover;
+      border-radius: var(--border-radius-md);
+      background: var(--color-background-secondary);
+      display: block;
     }
     .trip-card-name {
       font-size: 13px;
@@ -3094,24 +3112,55 @@
             if (placeCount === 0) geographyText = '訪問場所なし';
             else if (regions.length === 0) geographyText = '訪問地域未判定';
             else geographyText = regions.join('・');
+            // Issue #9: 1 枚目の写真があればサムネ要素を描画（src は後段で async に差し込む）
+            const firstPhotoId = trip.photos && trip.photos[0] ? trip.photos[0].id : null;
+            const thumbHtml = firstPhotoId
+              ? `<img class="trip-card-thumb" data-photo-id="${this.escape(firstPhotoId)}" alt="">`
+              : '';
             return `
             <div class="trip-card${isSelected ? ' selected' : ''}" data-trip-id="${this.escape(trip.id)}"
                  role="button" tabindex="0" aria-pressed="${isSelected ? 'true' : 'false'}">
-              <div class="trip-card-name">${this.escape(trip.name)}</div>
-              <div class="trip-card-meta">
-                <div class="trip-card-meta-row">
-                  <i class="ti ti-calendar" style="font-size:11px" aria-hidden="true"></i>
-                  <span>${this.escape(trip.startDate)} 〜 ${this.escape(trip.endDate)}</span>
+              <div class="trip-card-body">
+                <div class="trip-card-name">${this.escape(trip.name)}</div>
+                <div class="trip-card-meta">
+                  <div class="trip-card-meta-row">
+                    <i class="ti ti-calendar" style="font-size:11px" aria-hidden="true"></i>
+                    <span>${this.escape(trip.startDate)} 〜 ${this.escape(trip.endDate)}</span>
+                  </div>
+                  <div class="trip-card-meta-row">
+                    <i class="ti ti-map-pin" style="font-size:11px" aria-hidden="true"></i>
+                    <span>${this.escape(geographyText)}</span>
+                  </div>
                 </div>
-                <div class="trip-card-meta-row">
-                  <i class="ti ti-map-pin" style="font-size:11px" aria-hidden="true"></i>
-                  <span>${this.escape(geographyText)}</span>
-                </div>
+                ${tagsHtml}
               </div>
-              ${tagsHtml}
+              ${thumbHtml}
             </div>
           `;
           }).join('');
+          // サムネ画像を IndexedDB から非同期で取得して src に差し込む
+          this.loadTripCardThumbnails();
+        },
+
+        // 各 trip-card 内のサムネ <img> に対し、photoDB から dataURL を取得して src を設定する。
+        // 取得失敗時はサムネ要素を取り除き、領域も確保しない（写真なしと同等の見た目に倒す）。
+        async loadTripCardThumbnails() {
+          const thumbs = this.el['trip-list'].querySelectorAll('.trip-card-thumb[data-photo-id]');
+          for (const img of thumbs) {
+            const id = img.dataset.photoId;
+            if (!id) continue;
+            try {
+              const photo = await this.photoDB.get(id);
+              if (photo && photo.dataURL) {
+                img.src = photo.dataURL;
+              } else {
+                img.remove();
+              }
+            } catch (err) {
+              console.error('カードサムネの取得に失敗', err);
+              img.remove();
+            }
+          }
         },
 
         // 右パネル詳細：選択中の旅行の情報を描画。空のセクションは非表示
