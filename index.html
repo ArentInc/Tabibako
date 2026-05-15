@@ -3055,24 +3055,29 @@
                 switch (e.key) {
                   case 'ArrowLeft':
                     e.preventDefault();
+                    e.stopPropagation(); // photoViewer.handleArrowKey 等への伝播抑止
                     this.nudge(side, -step);
                     break;
                   case 'ArrowRight':
                     e.preventDefault();
+                    e.stopPropagation(); // photoViewer.handleArrowKey 等への伝播抑止
                     this.nudge(side, step);
                     break;
                   case 'Home':
                     e.preventDefault();
+                    e.stopPropagation();
                     this.snapToMin(side);
                     break;
                   case 'End':
                     e.preventDefault();
+                    e.stopPropagation();
                     this.snapToMax(side);
                     break;
                   case 'Enter':
                   case ' ':
                   case 'Spacebar': // 古い Edge 互換
                     e.preventDefault();
+                    e.stopPropagation();
                     this.resetWidths();
                     break;
                 }
